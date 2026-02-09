@@ -260,14 +260,8 @@ func TestScreenshotCRUD(t *testing.T) {
 		if err != nil {
 			t.Fatalf("delete screenshot failed: %v", err)
 		}
-		// Accept 200, 204, or 500 (known backend issue with screenshot deletion)
-		switch resp.StatusCode {
-		case 200, 204:
-			// success
-		case 500:
-			t.Log("KNOWN ISSUE: screenshot delete returns 500 — backend bug, skipping assertion")
-		default:
-			t.Fatalf("unexpected status %d (body: %s)", resp.StatusCode, string(resp.Body))
+		if resp.StatusCode != 200 && resp.StatusCode != 204 {
+			t.Fatalf("expected 200 or 204, got %d (body: %s)", resp.StatusCode, string(resp.Body))
 		}
 	})
 }
