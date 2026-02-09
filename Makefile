@@ -1,4 +1,4 @@
-.PHONY: build clean test install
+.PHONY: build clean test test-integration test-all install
 
 VERSION ?= 1.0.0
 BINARY_NAME = oio
@@ -41,6 +41,13 @@ clean:
 test:
 	@go test -v ./...
 
+# Run integration tests (requires auth)
+test-integration:
+	@go test -v -tags=integration -timeout=5m -count=1 ./test/integration/
+
+# Run all tests
+test-all: test test-integration
+
 # Format code
 fmt:
 	@go fmt ./...
@@ -66,7 +73,9 @@ help:
 	@echo "  make build-all  Build for all platforms"
 	@echo "  make install    Build and install to /usr/local/bin"
 	@echo "  make clean      Remove build artifacts"
-	@echo "  make test       Run tests"
+	@echo "  make test       Run unit tests"
+	@echo "  make test-integration  Run integration tests (requires auth)"
+	@echo "  make test-all   Run all tests"
 	@echo "  make fmt        Format code"
 	@echo "  make tidy       Run go mod tidy"
 	@echo "  make dev        Build with race detector"

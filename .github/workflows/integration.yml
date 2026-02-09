@@ -1,0 +1,27 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 8 * * *" # Daily at 8am UTC
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    # Skip on fork PRs (no access to secrets)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run integration tests
+        env:
+          OIO_REFRESH_TOKEN: ${{ secrets.OIO_REFRESH_TOKEN }}
+        run: go test -v -tags=integration -timeout=5m -count=1 ./test/integration/
