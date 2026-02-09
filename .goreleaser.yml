@@ -1,0 +1,51 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/oio
+    binary: oio
+    ldflags:
+      - -s -w -X github.com/sim4gh/oio-go/internal/cli.Version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+brews:
+  - name: oio
+    repository:
+      owner: sim4gh
+      name: homebrew-oio
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/sim4gh/oio-go"
+    description: "Fast CLI for ephemeral content management"
+    license: "MIT"
+    install: |
+      bin.install "oio"
+    test: |
+      system "#{bin}/oio", "--version"
