@@ -15,23 +15,25 @@ A fast, single-binary CLI tool for ephemeral content management. This is a Go po
 
 ## Installation
 
-### Build from source
+### Homebrew (recommended)
 
 ```bash
-# Clone the repository
-git clone https://github.com/sim4gh/oio-go.git
-cd oio-go
-
-# Build
-make build
-
-# Install to /usr/local/bin
-make install
+brew tap sim4gh/oio
+brew install oio
 ```
 
 ### Download binary
 
-Download the latest release from the releases page and add to your PATH.
+Download the latest release from the [releases page](https://github.com/sim4gh/oio-go/releases) and add to your PATH.
+
+### Build from source
+
+```bash
+git clone https://github.com/sim4gh/oio-go.git
+cd oio-go
+make build
+make install
+```
 
 ## Quick Start
 
@@ -158,21 +160,29 @@ Maximum TTL: 365 days (1 year)
 ## Development
 
 ```bash
-# Build
-make build
-
-# Build for all platforms
-make build-all
-
-# Run tests
-make test
-
-# Format code
-make fmt
-
-# Development build with race detector
-make dev
+make build              # Build for current platform
+make build-all          # Build for all platforms
+make test               # Run unit tests
+make test-integration   # Run integration tests (requires auth)
+make test-all           # Run all tests
+make fmt                # Format code
+make dev                # Build with race detector
+make lint               # Run linter
 ```
+
+### Integration Tests
+
+Integration tests exercise the real API and live in `test/integration/`. They are guarded by the `//go:build integration` build tag so `make test` won't run them.
+
+```bash
+# Run all integration tests (requires prior `oio auth login`)
+make test-integration
+
+# Run just the health check (no auth needed)
+go test -v -tags=integration -run TestHealthEndpoint ./test/integration/
+```
+
+In CI, the `OIO_REFRESH_TOKEN` GitHub secret provides authentication.
 
 ## Architecture
 
@@ -180,16 +190,22 @@ make dev
 oio-go/
 ├── cmd/oio/main.go              # Entry point
 ├── internal/
-│   ├── auth/                    # OAuth, JWT, Cognito
-│   │   ├── device_flow.go       # OAuth 2.0 Device Flow
-│   │   ├── token.go             # JWT handling
-│   │   └── cognito.go           # Token refresh
 │   ├── api/client.go            # HTTP client with auto-refresh
-│   ├── cli/                     # Command implementations
+│   ├── auth/                    # OAuth, JWT, Cognito
+│   │   ├── cognito.go           # Token refresh
+│   │   ├── device_flow.go       # OAuth 2.0 Device Flow
+│   │   └── token.go             # JWT handling
+│   ├── cli/                     # Command implementations (Cobra)
 │   ├── config/                  # Configuration management
-│   ├── platform/                # Platform-specific code
-│   ├── upload/                  # Multipart upload
-│   └── util/                    # Utilities
+│   ├── platform/                # Platform-specific code (build tags)
+│   ├── upload/                  # S3 multipart upload
+│   └── util/                    # TTL parsing, formatting
+├── test/integration/            # Integration tests
+│   ├── helpers_test.go          # TestMain, auth setup, helpers
+│   └── integration_test.go      # API test cases
+├── .github/workflows/
+│   ├── release.yml              # GoReleaser on tag push
+│   └── integration.yml          # Integration tests CI
 ├── go.mod
 ├── Makefile
 └── README.md

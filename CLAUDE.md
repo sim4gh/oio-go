@@ -82,6 +82,12 @@ oio-go/
 │   └── util/
 │       ├── format.go            # Byte formatting, progress bars
 │       └── ttl.go               # TTL parsing and formatting
+├── test/integration/            # Integration tests (build tag: integration)
+│   ├── helpers_test.go          # TestMain, auth setup, test helpers
+│   └── integration_test.go      # API integration test cases
+├── .github/workflows/
+│   ├── release.yml              # GoReleaser on tag push
+│   └── integration.yml          # Integration tests CI
 ├── go.mod
 ├── Makefile
 └── README.md
@@ -253,7 +259,34 @@ The root command handles displaying errors and exit codes.
 
 ## Testing
 
-Currently no automated tests. Test manually:
+### Integration Tests
+
+Integration tests exercise the real API and require authentication. They live in `test/integration/` and are guarded by the `//go:build integration` build tag.
+
+```bash
+make test-integration           # Run integration tests (requires auth)
+make test-all                   # Run unit + integration tests
+
+# Run a single test
+go test -v -tags=integration -run TestHealthEndpoint -timeout=30s ./test/integration/
+
+# Health endpoint only (no auth needed)
+go test -v -tags=integration -run TestHealthEndpoint ./test/integration/
+```
+
+**Auth setup:** Locally, tests use the refresh token from `~/Library/Application Support/oio/config.json`. In CI, the `OIO_REFRESH_TOKEN` GitHub secret is used.
+
+**Test coverage:**
+- `TestHealthEndpoint` — no-auth connectivity check
+- `TestShortsCRUDLifecycle` — Create, Get, List, Extend, MakePermanent, Delete, Verify404
+- `TestShortsCreateValidation` — empty content returns 400
+- `TestShortsGetNotFound` — nonexistent ID returns 404
+- `TestShortsDeleteIdempotent` — double delete: first succeeds, second 404
+- `TestScreenshotCRUD` — create (1x1 PNG), get (verify downloadUrl), list, delete
+- `TestConcurrentOperations` — 3 parallel creates, verify all succeed
+
+### Manual Testing
+
 ```bash
 ./oio health                    # No auth required
 ./oio auth login                # Complete device flow
