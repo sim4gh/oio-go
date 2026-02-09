@@ -259,6 +259,8 @@ The root command handles displaying errors and exit codes.
 
 ## Testing
 
+**Existing tests must always pass. Never delete, skip, or modify existing tests to make code changes pass. If a test fails, fix the implementation, not the test. CI runs on every push/PR to `main`.**
+
 ### Integration Tests
 
 Integration tests exercise the real API and require authentication. They live in `test/integration/` and are guarded by the `//go:build integration` build tag.
