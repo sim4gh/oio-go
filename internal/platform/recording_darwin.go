@@ -49,19 +49,76 @@ func RecordScreen(duration int, selectRegion bool) (string, error) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		os.Remove(tmpFile)
+		return "", fmt.Errorf("screen recording failed: %w", err)
+	}
+
+	// Start overlay and terminal countdown
+	done := make(chan struct{})
+	var overlay *OverlayProcess
+	if selectRegion {
+		overlay = StartOverlay("elapsed", 0)
+		go terminalCountdown(0, true, done)
+	} else {
+		overlay = StartOverlay("countdown", duration)
+		go terminalCountdown(duration, false, done)
+	}
+
+	err := cmd.Wait()
+	close(done)
+	overlay.Stop()
+	fmt.Print("\r\033[K") // clear the countdown line
+
+	if err != nil {
 		os.Remove(tmpFile)
 		return "", fmt.Errorf("screen recording failed: %w", err)
 	}
 
 	// Check if file was created (user might have cancelled)
-	info, err := os.Stat(tmpFile)
-	if os.IsNotExist(err) || (err == nil && info.Size() == 0) {
+	info, statErr := os.Stat(tmpFile)
+	if os.IsNotExist(statErr) || (statErr == nil && info.Size() == 0) {
 		os.Remove(tmpFile)
 		return "", nil // user cancelled
 	}
 
 	return tmpFile, nil
+}
+
+// terminalCountdown prints a live recording indicator in the terminal.
+// If countdown is true, it counts down from duration; otherwise counts up.
+func terminalCountdown(duration int, elapsed bool, done <-chan struct{}) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	seconds := 0
+	printRecLine(seconds, duration, elapsed)
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			seconds++
+			printRecLine(seconds, duration, elapsed)
+		}
+	}
+}
+
+func printRecLine(seconds, duration int, elapsed bool) {
+	if elapsed {
+		fmt.Printf("\r  \033[31m●\033[0m REC  %s", formatRecTime(seconds))
+	} else {
+		remaining := duration - seconds
+		if remaining < 0 {
+			remaining = 0
+		}
+		fmt.Printf("\r  \033[31m●\033[0m REC  %s remaining", formatRecTime(remaining))
+	}
+}
+
+func formatRecTime(seconds int) string {
+	return fmt.Sprintf("%02d:%02d", seconds/60, seconds%60)
 }
 
 // scaleFilter returns the ffmpeg scale filter string.

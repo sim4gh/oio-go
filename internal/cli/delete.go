@@ -21,8 +21,8 @@ func addDeleteCommand() {
 		Long: `Delete item by ID
 
 Examples:
-  oio d abc1                Delete with confirmation
-  oio d abc1 --force        Delete without confirmation`,
+  oio d <id>                   Delete with confirmation
+    └ --force                  Delete without confirmation`,
 		Aliases: []string{"delete"},
 		Args:    cobra.ExactArgs(1),
 		RunE:    runDelete,

@@ -29,10 +29,10 @@ func addGetCommand() {
 		Long: `Get/download item by ID
 
 Examples:
-  oio g abc1                Download item to current directory
-  oio g abc1 --url          Get download URL only
-  oio g abc1 --copy         Copy download URL to clipboard
-  oio g abc1 -o ~/Downloads Save to specific directory`,
+  oio g <id>                   Download item to current directory
+    ├ --url                    Get download URL only
+    ├ --copy                   Copy download URL to clipboard
+    └ -o ~/Downloads           Save to specific directory`,
 		Aliases: []string{"get"},
 		Args:    cobra.ExactArgs(1),
 		RunE:    runGet,

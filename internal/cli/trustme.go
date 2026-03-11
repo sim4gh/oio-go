@@ -23,9 +23,9 @@ func addTrustMeCommand() {
 		Long: `Upload a file to someone's account using their trust token
 
 Examples:
-  oio trustme abc123 document.pdf     Upload file using trust token
-  oio trustme abc123 photo.jpg        Upload image using trust token
-  oio trustme abc123 large-video.mp4  Upload large file (multipart)`,
+  oio trustme <token> <file>   Upload file using trust token
+    ├ abc123 photo.jpg         Upload image
+    └ abc123 large-video.mp4   Upload large file (multipart)`,
 		Args: cobra.ExactArgs(2),
 		RunE: runTrustMe,
 	}

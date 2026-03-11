@@ -31,13 +31,13 @@ Allowed keys to set: baseurl, default_ttl, quiet
 Protected keys (read-only): id_token, access_token, refresh_token, logged_in_at
 
 Examples:
-  oio config                      Show all config
-  oio config get baseurl          Get baseurl value
-  oio config set default_ttl 7d   Set default TTL
-  oio config set quiet true       Enable quiet mode
-  oio config path                 Show config file path
-  oio config reset                Reset all config
-  oio config reset --force        Reset without confirmation`,
+  oio config                   Show all config
+    ├ get baseurl              Get baseurl value
+    ├ set default_ttl 7d       Set default TTL
+    ├ set quiet true           Enable quiet mode
+    ├ path                     Show config file path
+    ├ reset                    Reset all config
+    └ reset --force            Reset without confirmation`,
 		RunE: runConfig,
 	}
 

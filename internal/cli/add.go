@@ -42,14 +42,14 @@ func addAddCommand() {
 		Long: `Add item from clipboard, screenshot, file, or text
 
 Examples:
-  oio a                     Add from clipboard (text or image)
-  oio a sc                  Take screenshot (macOS)
-  oio a sc --watch          Continuous screenshot mode
-  oio a sc --watch 5        Auto-capture every 5 seconds
-  oio a document.pdf        Add file from path
-  oio a "Hello world"       Add text content
-  oio a --permanent         Add with no expiration
-  oio a photo.jpg --public --title "Event Photo"  Add and share`,
+  oio a                        Add from clipboard (text or image)
+    ├ sc                       Take screenshot (macOS)
+    ├ sc --watch               Continuous screenshot mode
+    ├ sc --watch 5             Auto-capture every 5 seconds
+    ├ document.pdf             Add file from path
+    ├ "Hello world"            Add text content
+    ├ --permanent              Add with no expiration
+    └ photo.jpg --public       Add and share`,
 		Aliases: []string{"add"},
 		RunE:    runAdd,
 	}

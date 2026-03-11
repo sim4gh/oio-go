@@ -30,10 +30,10 @@ func addShareCommand() {
 		Long: `Share item (Pro only)
 
 Examples:
-  oio sh abc1               Create public share link
-  oio sh abc1 --password x  Password-protected share
-  oio sh abc1 --expires 7d  Share expires in 7 days
-  oio sh abc1 --title "My Doc" --desc "Important file"
+  oio sh <id>                  Create public share link
+    ├ --password x             Password-protected share
+    ├ --expires 7d             Share expires in 7 days
+    └ --title "My Doc"         Share with title and description
 
 All shares use share.yumaverse.com/{id}`,
 		Aliases: []string{"share"},

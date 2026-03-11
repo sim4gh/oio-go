@@ -35,13 +35,13 @@ func addRecCommand() {
 		Long: `Record screen to GIF, MP4, or MOV
 
 Examples:
-  oio rec                    Record fullscreen 10s → GIF
-  oio rec -s                 Select region → record → GIF
-  oio rec -d 30              Record for 30 seconds
-  oio rec -f mp4             Record → MP4
-  oio rec -f mov             Record → MOV (no ffmpeg needed)
-  oio rec -s -f mp4 -d 20   Select region, 20s, MP4
-  oio rec -w 1280            Scale to 1280px wide`,
+  oio rec                      Record fullscreen 10s → GIF
+    ├ -s                       Select region → record → GIF
+    ├ -d 30                    Record for 30 seconds
+    ├ -f mp4                   Record → MP4
+    ├ -f mov                   Record → MOV (no ffmpeg needed)
+    ├ -s -f mp4 -d 20          Select region, 20s, MP4
+    └ -w 1280                  Scale to 1280px wide`,
 		RunE: runRec,
 	}
 
@@ -87,9 +87,9 @@ func runRec(cmd *cobra.Command, args []string) error {
 
 	// Record
 	if recSelect {
-		fmt.Println("Select area to record, then press Ctrl+C to stop recording...")
+		fmt.Println("Select area to record (Ctrl+C to stop)...")
 	} else {
-		fmt.Printf("Recording screen for %d seconds...\n", recDuration)
+		fmt.Printf("Recording fullscreen for %d seconds\n", recDuration)
 	}
 
 	movPath, err := platform.RecordScreen(recDuration, recSelect)

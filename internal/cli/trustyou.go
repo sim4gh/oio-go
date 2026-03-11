@@ -26,11 +26,11 @@ func addTrustYouCommand() {
 		Long: `Create a trust token that allows others to upload files to your account
 
 Examples:
-  oio trustyou                     Create token (1 upload, 24h, 150MB max)
-  oio trustyou --max 5             Allow up to 5 uploads
-  oio trustyou --ttl 7d            Token valid for 7 days
-  oio trustyou --max-size 10MB     Limit file size to 10MB
-  oio trustyou --max 10 --ttl 1h   10 uploads, expires in 1 hour`,
+  oio trustyou                 Create token (1 upload, 24h, 150MB max)
+    ├ --max 5                  Allow up to 5 uploads
+    ├ --ttl 7d                 Token valid for 7 days
+    ├ --max-size 10MB          Limit file size to 10MB
+    └ --max 10 --ttl 1h        10 uploads, expires in 1 hour`,
 		RunE: runTrustYou,
 	}
 

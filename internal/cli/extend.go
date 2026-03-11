@@ -22,9 +22,10 @@ func addExtendCommand() {
 		Long: `Extend TTL or make item permanent
 
 Examples:
-  oio extend abc1 --ttl 7d      Extend to 7 days from now
-  oio extend abc1 --ttl 24h     Extend to 24 hours from now
-  oio extend abc1 --permanent   Make permanent (no expiration)`,
+  oio extend <id>              Extend item TTL
+    ├ --ttl 7d                 Extend to 7 days from now
+    ├ --ttl 24h                Extend to 24 hours from now
+    └ --permanent              Make permanent (no expiration)`,
 		Args: cobra.ExactArgs(1),
 		RunE: runExtend,
 	}

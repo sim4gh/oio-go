@@ -49,10 +49,11 @@ Shows all your items (text, files, screenshots) with:
   [P] = Pro file
 
 Examples:
-  oio ls --type text           # Show only text items
-  oio ls --search "important"  # Search for "important"
-  oio ls --limit 5 --sort size # Top 5 by size
-  oio ls --raw | jq ".[]"      # JSON output for scripting`,
+  oio ls                       List all items
+    ├ --type text              Show only text items
+    ├ --search "important"     Search for "important"
+    ├ --limit 5 --sort size    Top 5 by size
+    └ --raw | jq ".[]"         JSON output for scripting`,
 		Aliases: []string{"list"},
 		RunE:    runList,
 	}
