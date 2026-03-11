@@ -166,6 +166,16 @@ func GetNoAuth(path string) (*Response, error) {
 	return Request(path, &RequestOptions{Method: "GET", RequireAuth: false})
 }
 
+// PostNoAuth makes an unauthenticated POST request
+func PostNoAuth(path string, body interface{}) (*Response, error) {
+	return Request(path, &RequestOptions{Method: "POST", Body: body, RequireAuth: false})
+}
+
+// PutNoAuth makes an unauthenticated PUT request
+func PutNoAuth(path string, body interface{}) (*Response, error) {
+	return Request(path, &RequestOptions{Method: "PUT", Body: body, RequireAuth: false})
+}
+
 // Unmarshal unmarshals the response body into the given interface
 func (r *Response) Unmarshal(v interface{}) error {
 	return json.Unmarshal(r.Body, v)

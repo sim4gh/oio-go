@@ -44,6 +44,8 @@ func init() {
 	addExtendCommand()
 	addShareCommand()
 	addRecCommand()
+	addTrustYouCommand()
+	addTrustMeCommand()
 	addShortcutCommands()
 }
 
