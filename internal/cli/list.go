@@ -42,12 +42,6 @@ func addListCommand() {
 		Short: "List all items",
 		Long: `List all items
 
-Shows all your items (text, files, screenshots) with:
-  [T] = Text content
-  [F] = File upload
-  [S] = Screenshot
-  [P] = Pro file
-
 Examples:
   oio ls                       List all items
     ├ --type text              Show only text items
@@ -176,7 +170,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Filters: %s\n", strings.Join(activeFilters, ", "))
 	}
 
-	fmt.Println("\nLegend: [T]=Text [F]=File [S]=Screenshot [P]=Pro File")
+	fmt.Println("\nTypes: Text, File, Screenshot, Pro")
 
 	return nil
 }
@@ -404,29 +398,29 @@ func displayItemsTable(items []Item) {
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"ID", "Type", "Content / Filename", "Size", "Expires"})
+	table.SetHeader([]string{"ID", "Type", "Content / Filename", "Size", "Date", "Expires"})
 	table.SetBorder(true)
 	table.SetAutoWrapText(false)
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
 
 	for _, item := range items {
-		var typeIndicator, contentDisplay, sizeDisplay, expiry string
+		var typeName, contentDisplay, sizeDisplay, dateDisplay, expiry string
 
 		switch item.Type {
 		case "text":
-			typeIndicator = "[T]"
+			typeName = "Text"
 			contentDisplay = util.Truncate(util.ReplaceNewlines(item.Preview), 38)
 		case "file":
-			typeIndicator = "[F]"
+			typeName = "File"
 			contentDisplay = util.Truncate(item.Filename, 38)
 		case "screenshot":
-			typeIndicator = "[S]"
+			typeName = "Screenshot"
 			contentDisplay = util.Truncate(item.Filename, 38)
 		case "profile":
-			typeIndicator = "[P]"
+			typeName = "Pro"
 			contentDisplay = util.Truncate(item.Filename, 38)
 		default:
-			typeIndicator = "[?]"
+			typeName = "?"
 			if item.Preview != "" {
 				contentDisplay = util.Truncate(item.Preview, 38)
 			} else {
@@ -438,13 +432,21 @@ func displayItemsTable(items []Item) {
 			sizeDisplay = util.FormatBytes(item.Size)
 		}
 
+		if item.CreatedAt != "" {
+			if t, err := time.Parse(time.RFC3339, item.CreatedAt); err == nil {
+				dateDisplay = t.Local().Format("Jan 02")
+			} else if t, err := time.Parse("2006-01-02T15:04:05.000Z", item.CreatedAt); err == nil {
+				dateDisplay = t.Local().Format("Jan 02")
+			}
+		}
+
 		if item.ExpiresAt > 0 {
 			expiry = util.FormatExpiry(item.ExpiresAt)
 		} else {
-			expiry = "perm"
+			expiry = "-"
 		}
 
-		table.Append([]string{item.ID, typeIndicator, contentDisplay, sizeDisplay, expiry})
+		table.Append([]string{item.ID, typeName, contentDisplay, sizeDisplay, dateDisplay, expiry})
 	}
 
 	table.Render()
