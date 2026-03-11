@@ -35,20 +35,21 @@ func addRecCommand() {
 		Long: `Record screen to GIF, MP4, or MOV
 
 Examples:
-  oio rec                         Record fullscreen 10s → GIF
-  oio rec -s                      Select region → record → GIF
-  oio rec --duration 30           Record for 30 seconds
-  oio rec --format mp4            Record → MP4
-  oio rec --format mov            Record → MOV (no ffmpeg needed)
-  oio rec -s --format mp4 -d 20  Select region, 20s, MP4`,
+  oio rec                    Record fullscreen 10s → GIF
+  oio rec -s                 Select region → record → GIF
+  oio rec -d 30              Record for 30 seconds
+  oio rec -f mp4             Record → MP4
+  oio rec -f mov             Record → MOV (no ffmpeg needed)
+  oio rec -s -f mp4 -d 20   Select region, 20s, MP4
+  oio rec -w 1280            Scale to 1280px wide`,
 		RunE: runRec,
 	}
 
 	recCmd.Flags().IntVarP(&recDuration, "duration", "d", defaultRecDuration, "Recording duration in seconds (max 60)")
 	recCmd.Flags().BoolVarP(&recSelect, "select", "s", false, "Select screen region to record")
-	recCmd.Flags().StringVar(&recFormat, "format", "gif", "Output format: gif, mp4, mov")
-	recCmd.Flags().IntVar(&recFPS, "fps", defaultRecFPS, "Frame rate for GIF (default 15)")
-	recCmd.Flags().IntVar(&recWidth, "width", 0, "Scale output width in pixels (0 = original resolution)")
+	recCmd.Flags().StringVarP(&recFormat, "format", "f", "gif", "Output format: gif, mp4, mov")
+	recCmd.Flags().IntVar(&recFPS, "fps", defaultRecFPS, "Frame rate for GIF")
+	recCmd.Flags().IntVarP(&recWidth, "width", "w", 0, "Scale output width in pixels (0 = original)")
 	recCmd.Flags().BoolVar(&recPermanent, "permanent", false, "Keep forever (default: 24h TTL)")
 	recCmd.Flags().StringVar(&recTTL, "ttl", defaultTTL, "Custom TTL (e.g., 1h, 7d)")
 	recCmd.Flags().BoolVarP(&recPublic, "public", "p", false, "Create public share on add (Pro)")

@@ -10,6 +10,7 @@ A fast, single-binary CLI tool for ephemeral content management. This is a Go po
 - **OAuth 2.0 Device Flow**: Secure authentication
 - **Automatic token refresh**: Seamless authentication management
 - **Multiple content types**: Text, files, screenshots (macOS)
+- **Screen recording**: Record screen to GIF, MP4, or MOV (macOS, requires ffmpeg for GIF/MP4)
 - **TTL-based expiration**: Automatic content deletion
 - **Pro features**: Sharing capabilities (Pro subscription)
 
@@ -49,6 +50,11 @@ oio a    # or: oio c
 
 # Take screenshot (macOS)
 oio a sc  # or: oio sc
+
+# Record screen to GIF (macOS, requires ffmpeg)
+oio rec
+oio rec -s              # Select region
+oio rec --format mp4    # MP4 format
 
 # Add file
 oio a document.pdf
@@ -105,6 +111,21 @@ oio d <id> --force         # Delete without confirmation
 oio extend <id> --ttl 7d   # Extend to 7 days
 oio extend <id> --permanent # Make permanent
 ```
+
+### Screen Recording (macOS)
+
+```bash
+oio rec                        # Record fullscreen 10s → GIF
+oio rec -s                     # Select region → record → GIF
+oio rec -d 30                  # Record for 30 seconds (max 60)
+oio rec --format mp4           # Record → MP4
+oio rec --format mov           # Record → MOV (no ffmpeg needed)
+oio rec --fps 15               # Custom frame rate (GIF only)
+oio rec --width 1280           # Scale output width (0 = original)
+oio rec -s --format mp4 -d 20  # Select region, 20s, MP4
+```
+
+Requires `ffmpeg` for GIF and MP4 formats (`brew install ffmpeg`). MOV format uses native `screencapture` only.
 
 ### Sharing (Pro)
 

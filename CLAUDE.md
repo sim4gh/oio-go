@@ -9,6 +9,7 @@ OIO CLI (Go) is a fast, single-binary command-line tool for ephemeral content ma
 Features:
 - OAuth 2.0 Device Flow authentication
 - Unified content management (text, files, screenshots)
+- Screen recording to GIF, MP4, or MOV (macOS, requires ffmpeg for GIF/MP4)
 - TTL-based auto-deletion (default: 24h)
 - Sharing capabilities (Pro subscription)
 - Cross-platform support (macOS, Linux, Windows)
@@ -68,6 +69,7 @@ oio-go/
 │   │   ├── share.go             # share command (Pro)
 │   │   ├── config.go            # config management
 │   │   ├── health.go            # health check
+│   │   ├── rec.go               # screen recording (GIF/MP4/MOV)
 │   │   └── shortcuts.go         # c, sc, p aliases
 │   ├── config/
 │   │   ├── config.go            # JSON config management
@@ -76,8 +78,10 @@ oio-go/
 │   │   ├── clipboard.go         # Clipboard detection
 │   │   ├── clipboard_darwin.go  # macOS clipboard (pngpaste)
 │   │   ├── clipboard_other.go   # Stub for other platforms
-│   │   ├── screenshot_darwin.go # macOS screenshot (screencapture)
-│   │   └── screenshot_other.go  # Stub for other platforms
+│   │   ├── screenshot_darwin.go  # macOS screenshot (screencapture)
+│   │   ├── screenshot_other.go  # Stub for other platforms
+│   │   ├── recording_darwin.go  # macOS screen recording + conversion
+│   │   └── recording_other.go   # Stub for other platforms
 │   ├── upload/multipart.go      # S3 multipart upload
 │   └── util/
 │       ├── format.go            # Byte formatting, progress bars
@@ -137,6 +141,12 @@ oio
 ├── d <id>  (alias: delete)# Delete item
 ├── extend <id>            # Extend TTL
 ├── sh <id>  (alias: share)# Share item (Pro)
+├── rec                    # Screen recording (GIF/MP4/MOV, macOS)
+│   ├── oio rec            # Fullscreen 10s → GIF
+│   ├── oio rec -s         # Select region → GIF
+│   ├── oio rec -d 30      # 30 seconds
+│   ├── oio rec --format mp4  # MP4 output
+│   └── oio rec --format mov  # MOV (no ffmpeg)
 ├── config                 # Configuration management
 ├── health                 # Health check
 ├── c                      # Quick clipboard (alias for "oio a")
@@ -239,9 +249,10 @@ Use build tags for platform-specific implementations:
 // non-darwin fallback
 ```
 
-Screenshot and clipboard image features are macOS-only:
-- `screencapture` command for screenshots
+Screenshot, recording, and clipboard image features are macOS-only:
+- `screencapture` command for screenshots and screen recording
 - `pngpaste` (brew install pngpaste) for clipboard images
+- `ffmpeg` (brew install ffmpeg) for GIF/MP4 conversion (MOV works without it)
 
 ## Error Handling
 
