@@ -81,6 +81,11 @@ func Save() error {
 	mu.Lock()
 	defer mu.Unlock()
 
+	return saveLocked()
+}
+
+// saveLocked persists the configuration to disk. Caller must hold mu.
+func saveLocked() error {
 	if instance == nil {
 		return errors.New("config not loaded")
 	}
@@ -135,25 +140,25 @@ func Set(key, value string) error {
 		return errors.New("unknown config key: " + key)
 	}
 
-	return Save()
+	return saveLocked()
 }
 
 // SetConfig updates the entire config at once and saves
 func SetConfig(cfg *Config) error {
 	mu.Lock()
-	instance = cfg
-	mu.Unlock()
+	defer mu.Unlock()
 
-	return Save()
+	instance = cfg
+	return saveLocked()
 }
 
 // Clear removes all configuration
 func Clear() error {
 	mu.Lock()
-	instance = &Config{}
-	mu.Unlock()
+	defer mu.Unlock()
 
-	return Save()
+	instance = &Config{}
+	return saveLocked()
 }
 
 // Path returns the config file path
