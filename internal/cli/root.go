@@ -8,7 +8,7 @@ import (
 )
 
 // Version is set at build time
-var Version = "2.1.0"
+var Version = "2.2.0"
 
 // rootCmd represents the base command
 var rootCmd = &cobra.Command{
