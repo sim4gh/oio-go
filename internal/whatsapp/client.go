@@ -66,14 +66,21 @@ func GetDBPath() (string, error) {
 	return filepath.Join(configDir, "whatsapp.db"), nil
 }
 
-// NewClient creates a new WhatsApp client backed by SQLite
-func NewClient() (*whatsmeow.Client, error) {
+// NewClient creates a new WhatsApp client backed by SQLite.
+// If verbose is true, logs are written to stderr for debugging.
+func NewClient(verbose bool) (*whatsmeow.Client, error) {
 	dbPath, err := GetDBPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get database path: %w", err)
 	}
 
-	var log noopLogger
+	var log waLog.Logger
+	if verbose {
+		log = waLog.Stdout("WhatsApp", "INFO", true)
+	} else {
+		log = noopLogger{}
+	}
+
 	container, err := sqlstore.New(context.Background(), "sqlite", "file:"+dbPath+"?_pragma=foreign_keys(1)", log)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session store: %w", err)

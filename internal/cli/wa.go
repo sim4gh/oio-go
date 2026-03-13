@@ -90,7 +90,7 @@ Examples:
 var waLsDuration int
 
 func runWaLink(cmd *cobra.Command, args []string) error {
-	client, err := whatsapp.NewClient()
+	client, err := whatsapp.NewClient(false)
 	if err != nil {
 		return fmt.Errorf("failed to initialize WhatsApp: %w", err)
 	}
@@ -101,6 +101,30 @@ func runWaLink(cmd *cobra.Command, args []string) error {
 		fmt.Println("Run \"oio wa unlink\" first to re-link.")
 		return nil
 	}
+
+	// Listen for pairing events via event handler (primary success signal)
+	pairSuccess := make(chan string, 1)
+	pairError := make(chan error, 1)
+
+	client.AddEventHandler(func(evt interface{}) {
+		switch v := evt.(type) {
+		case *events.PairSuccess:
+			select {
+			case pairSuccess <- v.ID.String():
+			default:
+			}
+		case *events.PairError:
+			select {
+			case pairError <- fmt.Errorf("pairing failed: %v", v.Error):
+			default:
+			}
+		case *events.Connected:
+			select {
+			case pairSuccess <- "connected":
+			default:
+			}
+		}
+	})
 
 	qrChan, err := client.GetQRChannel(context.Background())
 	if err != nil {
@@ -115,23 +139,45 @@ func runWaLink(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nScan this QR code with WhatsApp:")
 	fmt.Println("  WhatsApp > Settings > Linked Devices > Link a Device\n")
 
-	for evt := range qrChan {
-		switch evt.Event {
-		case "code":
-			qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-		case "login":
+	for {
+		select {
+		case evt, ok := <-qrChan:
+			if !ok {
+				// QR channel closed — check if we paired via event handler
+				select {
+				case <-pairSuccess:
+					fmt.Println("\nWhatsApp linked successfully!")
+					return nil
+				default:
+					return fmt.Errorf("connection closed unexpectedly")
+				}
+			}
+			switch evt.Event {
+			case "code":
+				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
+			case "login":
+				fmt.Println("\nWhatsApp linked successfully!")
+				return nil
+			case "timeout":
+				return fmt.Errorf("QR code expired. Run \"oio wa link\" again")
+			case "error":
+				return fmt.Errorf("QR channel error. Run \"oio wa link\" again")
+			}
+
+		case <-pairSuccess:
 			fmt.Println("\nWhatsApp linked successfully!")
+			// Wait briefly for the session to be fully saved
+			time.Sleep(1 * time.Second)
 			return nil
-		case "timeout":
-			return fmt.Errorf("QR code expired. Run \"oio wa link\" again")
+
+		case pairErr := <-pairError:
+			return pairErr
 		}
 	}
-
-	return nil
 }
 
 func runWaSend(cmd *cobra.Command, args []string) error {
-	client, err := whatsapp.NewClient()
+	client, err := whatsapp.NewClient(false)
 	if err != nil {
 		return err
 	}
@@ -186,7 +232,7 @@ func runWaSend(cmd *cobra.Command, args []string) error {
 }
 
 func runWaLs(cmd *cobra.Command, args []string) error {
-	client, err := whatsapp.NewClient()
+	client, err := whatsapp.NewClient(false)
 	if err != nil {
 		return err
 	}
@@ -284,7 +330,7 @@ func runWaUnlink(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	client, err := whatsapp.NewClient()
+	client, err := whatsapp.NewClient(false)
 	if err != nil {
 		// If we can't create client, just delete the DB
 		if delErr := whatsapp.DeleteDB(); delErr != nil {
@@ -317,7 +363,7 @@ func runWaStatus(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	client, err := whatsapp.NewClient()
+	client, err := whatsapp.NewClient(false)
 	if err != nil {
 		return err
 	}
