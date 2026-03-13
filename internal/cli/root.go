@@ -8,7 +8,7 @@ import (
 )
 
 // Version is set at build time
-var Version = "2.3.1"
+var Version = "2.4.0"
 
 // rootCmd represents the base command
 var rootCmd = &cobra.Command{
@@ -47,6 +47,7 @@ func init() {
 	addTrustYouCommand()
 	addTrustMeCommand()
 	addShortcutCommands()
+	addWaCommands()
 
 	// Custom root help with tree structure and inline aliases
 	defaultHelp := rootCmd.HelpFunc()
@@ -84,6 +85,12 @@ Commands:
     └ p <id>                  Quick public share shortcut
   trustme <token> <file>      Upload file using trust token
   trustyou                    Create trust token for unauthenticated uploads
+  wa                          WhatsApp messaging commands
+    ├ link                    Link WhatsApp (scan QR code)
+    ├ send <number> [msg]     Send a WhatsApp message
+    ├ ls                      Show incoming messages (live)
+    ├ status                  Check link status
+    └ unlink                  Unlink WhatsApp
 
 Flags:
   -h, --help      help for oio
