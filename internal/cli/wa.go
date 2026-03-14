@@ -4,19 +4,24 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/briandowns/spinner"
 	"github.com/mdp/qrterminal/v3"
-	"github.com/olekukonko/tablewriter"
 	"github.com/sim4gh/oio-go/internal/whatsapp"
 	"github.com/spf13/cobra"
 	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/proto/waHistorySync"
+	"go.mau.fi/whatsmeow/proto/waWeb"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 )
+
+var waLsAll bool
 
 func addWaCommands() {
 	waCmd := &cobra.Command{
@@ -28,7 +33,8 @@ Examples:
   oio wa link                          Link WhatsApp (scan QR code)
   oio wa send 7778887788 "Hello!"      Send a message
   oio wa send 7778887788               Send clipboard content
-  oio wa ls                            List recent messages
+  oio wa ls                            Show unread messages
+  oio wa ls --all                      Show all recent conversations
   oio wa status                        Check link status
   oio wa unlink                        Unlink WhatsApp`,
 	}
@@ -57,19 +63,19 @@ Examples:
 
 	lsCmd := &cobra.Command{
 		Use:     "ls",
-		Short:   "Show incoming messages (live)",
+		Short:   "Show unread messages",
 		Aliases: []string{"list"},
-		Long: `Connect to WhatsApp and display incoming messages in real-time.
+		Long: `Connect to WhatsApp and display unread messages from history sync.
 
-Listens for messages for the specified duration (default: 10 seconds).
-Press Ctrl+C to stop early.
+By default, only shows conversations with unread messages (the red badge).
+Use --all to show all recent conversations.
 
 Examples:
-  oio wa ls               # listen for 10 seconds
-  oio wa ls --duration 30 # listen for 30 seconds`,
+  oio wa ls          # show unread messages
+  oio wa ls --all    # show all recent conversations`,
 		RunE: runWaLs,
 	}
-	lsCmd.Flags().IntVar(&waLsDuration, "duration", 10, "Seconds to listen for messages")
+	lsCmd.Flags().BoolVar(&waLsAll, "all", false, "Show all recent conversations, not just unread")
 
 	unlinkCmd := &cobra.Command{
 		Use:   "unlink",
@@ -86,8 +92,6 @@ Examples:
 	waCmd.AddCommand(linkCmd, sendCmd, lsCmd, unlinkCmd, statusCmd)
 	rootCmd.AddCommand(waCmd)
 }
-
-var waLsDuration int
 
 func runWaLink(cmd *cobra.Command, args []string) error {
 	client, err := whatsapp.NewClient(false)
@@ -232,6 +236,15 @@ func runWaSend(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// unreadConversation holds a conversation with unread messages from history sync.
+type unreadConversation struct {
+	Name        string
+	JID         string
+	UnreadCount uint32
+	Messages    []*waWeb.WebMessageInfo
+	LastMsgTime uint64
+}
+
 func runWaLs(cmd *cobra.Command, args []string) error {
 	client, err := whatsapp.NewClient(false)
 	if err != nil {
@@ -243,45 +256,32 @@ func runWaLs(cmd *cobra.Command, args []string) error {
 	}
 
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	s.Suffix = " Connecting to WhatsApp..."
+	s.Suffix = " Connecting and syncing messages..."
 	s.Start()
 
-	type chatMessage struct {
-		Time   string
-		From   string
-		Text   string
-		IsGroup bool
-	}
-	var messages []chatMessage
+	var mu sync.Mutex
+	var conversations []*unreadConversation
 
 	client.AddEventHandler(func(evt interface{}) {
 		switch v := evt.(type) {
-		case *events.Message:
-			text := extractMessageText(v)
-			if text == "" {
-				return // Skip protocol/system messages with no user content
+		case *events.HistorySync:
+			if v.Data == nil {
+				return
 			}
-
-			sender := v.Info.Sender.User
-			if v.Info.PushName != "" {
-				sender = v.Info.PushName
+			mu.Lock()
+			defer mu.Unlock()
+			for _, conv := range v.Data.GetConversations() {
+				if !waLsAll && conv.GetUnreadCount() == 0 {
+					continue
+				}
+				conversations = append(conversations, &unreadConversation{
+					Name:        conversationName(conv),
+					JID:         conv.GetID(),
+					UnreadCount: conv.GetUnreadCount(),
+					Messages:    extractWebMessages(conv.GetMessages()),
+					LastMsgTime: conv.GetLastMsgTimestamp(),
+				})
 			}
-
-			isGroup := v.Info.IsGroup
-			messages = append(messages, chatMessage{
-				Time:    v.Info.Timestamp.Local().Format("15:04:05"),
-				From:    sender,
-				Text:    text,
-				IsGroup: isGroup,
-			})
-
-			// Print in real-time
-			s.Stop()
-			groupTag := ""
-			if isGroup {
-				groupTag = " [group]"
-			}
-			fmt.Printf("[%s] %s%s: %s\n", v.Info.Timestamp.Local().Format("15:04"), sender, groupTag, truncateMsg(text, 80))
 		}
 	})
 
@@ -292,20 +292,104 @@ func runWaLs(cmd *cobra.Command, args []string) error {
 	}
 	defer client.Disconnect()
 
+	// Wait for history sync events (they arrive in chunks over several seconds)
+	time.Sleep(10 * time.Second)
 	s.Stop()
 
-	duration := time.Duration(waLsDuration) * time.Second
-	fmt.Printf("Listening for messages (%ds)... Press Ctrl+C to stop.\n\n", waLsDuration)
+	mu.Lock()
+	defer mu.Unlock()
 
-	time.Sleep(duration)
+	if len(conversations) == 0 {
+		if waLsAll {
+			fmt.Println("No conversations found.")
+		} else {
+			fmt.Println("No unread messages.")
+		}
+		return nil
+	}
 
-	if len(messages) == 0 {
-		fmt.Println("\nNo messages received during this period.")
-	} else {
-		fmt.Printf("\n%d message(s) received.\n", len(messages))
+	// Sort by last message timestamp (most recent first)
+	sort.Slice(conversations, func(i, j int) bool {
+		return conversations[i].LastMsgTime > conversations[j].LastMsgTime
+	})
+
+	for _, conv := range conversations {
+		printConversation(conv)
 	}
 
 	return nil
+}
+
+// conversationName returns the best display name for a conversation.
+func conversationName(conv *waHistorySync.Conversation) string {
+	if n := conv.GetDisplayName(); n != "" {
+		return n
+	}
+	if n := conv.GetName(); n != "" {
+		return n
+	}
+	return conv.GetID()
+}
+
+// extractWebMessages extracts WebMessageInfo from history sync messages.
+func extractWebMessages(msgs []*waHistorySync.HistorySyncMsg) []*waWeb.WebMessageInfo {
+	out := make([]*waWeb.WebMessageInfo, 0, len(msgs))
+	for _, m := range msgs {
+		if wmi := m.GetMessage(); wmi != nil {
+			out = append(out, wmi)
+		}
+	}
+	return out
+}
+
+// printConversation renders a single conversation's unread messages.
+func printConversation(conv *unreadConversation) {
+	isGroup := strings.Contains(conv.JID, "@g.us")
+
+	// Header line
+	if conv.UnreadCount > 0 {
+		fmt.Printf("\n%s — %d unread\n", conv.Name, conv.UnreadCount)
+	} else {
+		fmt.Printf("\n%s\n", conv.Name)
+	}
+
+	// Sort messages by timestamp (oldest first)
+	msgs := conv.Messages
+	sort.Slice(msgs, func(i, j int) bool {
+		return msgs[i].GetMessageTimestamp() < msgs[j].GetMessageTimestamp()
+	})
+
+	// Show up to unreadCount messages from the end, or all if --all
+	showMsgs := msgs
+	if !waLsAll && conv.UnreadCount > 0 && int(conv.UnreadCount) < len(msgs) {
+		showMsgs = msgs[len(msgs)-int(conv.UnreadCount):]
+	}
+
+	for _, wmi := range showMsgs {
+		if wmi.GetKey().GetFromMe() {
+			continue // Skip our own sent messages
+		}
+		text := extractMessageText(wmi.GetMessage())
+		if text == "" {
+			continue
+		}
+
+		ts := time.Unix(int64(wmi.GetMessageTimestamp()), 0).Local().Format("15:04")
+
+		if isGroup {
+			sender := wmi.GetPushName()
+			if sender == "" {
+				sender = wmi.GetParticipant()
+			}
+			if sender != "" {
+				fmt.Printf("  [%s] %s: %s\n", ts, sender, truncateMsg(text, 70))
+			} else {
+				fmt.Printf("  [%s] %s\n", ts, truncateMsg(text, 70))
+			}
+		} else {
+			fmt.Printf("  [%s] %s\n", ts, truncateMsg(text, 70))
+		}
+	}
 }
 
 func runWaUnlink(cmd *cobra.Command, args []string) error {
@@ -379,33 +463,12 @@ func runWaStatus(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// displayContacts shows contacts in a table
-func displayContacts(contacts map[string]string) {
-	if len(contacts) == 0 {
-		fmt.Println("No contacts found.")
-		return
-	}
-
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Name", "Number"})
-	table.SetBorder(true)
-	table.SetAutoWrapText(false)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-
-	for number, name := range contacts {
-		if name == "" {
-			name = number
-		}
-		table.Append([]string{name, number})
-	}
-
-	table.Render()
-}
-
 // extractMessageText extracts user-visible text from a WhatsApp message.
 // Returns empty string for protocol/system messages that should be skipped.
-func extractMessageText(v *events.Message) string {
-	msg := v.Message
+func extractMessageText(msg *waE2E.Message) string {
+	if msg == nil {
+		return ""
+	}
 
 	// Unwrap container message types
 	if msg.GetEphemeralMessage() != nil && msg.GetEphemeralMessage().GetMessage() != nil {
