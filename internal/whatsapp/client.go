@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	signalLogger "go.mau.fi/libsignal/logger"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
@@ -23,6 +24,21 @@ func (noopLogger) Errorf(string, ...interface{}) {}
 func (noopLogger) Infof(string, ...interface{})  {}
 func (noopLogger) Debugf(string, ...interface{}) {}
 func (noopLogger) Sub(string) waLog.Logger       { return noopLogger{} }
+
+// silentSignalLogger silences libsignal's own global logger
+type silentSignalLogger struct{}
+
+func (silentSignalLogger) Debug(string, string)   {}
+func (silentSignalLogger) Info(string, string)    {}
+func (silentSignalLogger) Warning(string, string) {}
+func (silentSignalLogger) Error(string, string)   {}
+func (silentSignalLogger) Configure(string)       {}
+
+func init() {
+	// Silence libsignal's global logger (separate from whatsmeow's logger)
+	var sl signalLogger.Loggable = &silentSignalLogger{}
+	signalLogger.Setup(&sl)
+}
 
 // GetDBPath returns the platform-specific WhatsApp database path
 func GetDBPath() (string, error) {

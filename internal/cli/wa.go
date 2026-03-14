@@ -137,7 +137,8 @@ func runWaLink(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("\nScan this QR code with WhatsApp:")
-	fmt.Println("  WhatsApp > Settings > Linked Devices > Link a Device\n")
+	fmt.Println("  WhatsApp > Settings > Linked Devices > Link a Device")
+	fmt.Println()
 
 	for {
 		select {
@@ -256,31 +257,14 @@ func runWaLs(cmd *cobra.Command, args []string) error {
 	client.AddEventHandler(func(evt interface{}) {
 		switch v := evt.(type) {
 		case *events.Message:
+			text := extractMessageText(v)
+			if text == "" {
+				return // Skip protocol/system messages with no user content
+			}
+
 			sender := v.Info.Sender.User
 			if v.Info.PushName != "" {
 				sender = v.Info.PushName
-			}
-
-			text := ""
-			if v.Message.GetConversation() != "" {
-				text = v.Message.GetConversation()
-			} else if v.Message.GetExtendedTextMessage() != nil {
-				text = v.Message.GetExtendedTextMessage().GetText()
-			} else if v.Message.GetImageMessage() != nil {
-				text = "[Image]"
-				if cap := v.Message.GetImageMessage().GetCaption(); cap != "" {
-					text = "[Image] " + cap
-				}
-			} else if v.Message.GetVideoMessage() != nil {
-				text = "[Video]"
-			} else if v.Message.GetDocumentMessage() != nil {
-				text = "[Document]"
-			} else if v.Message.GetAudioMessage() != nil {
-				text = "[Audio]"
-			} else if v.Message.GetStickerMessage() != nil {
-				text = "[Sticker]"
-			} else {
-				text = "[Message]"
 			}
 
 			isGroup := v.Info.IsGroup
@@ -416,6 +400,87 @@ func displayContacts(contacts map[string]string) {
 	}
 
 	table.Render()
+}
+
+// extractMessageText extracts user-visible text from a WhatsApp message.
+// Returns empty string for protocol/system messages that should be skipped.
+func extractMessageText(v *events.Message) string {
+	msg := v.Message
+
+	// Unwrap container message types
+	if msg.GetEphemeralMessage() != nil && msg.GetEphemeralMessage().GetMessage() != nil {
+		msg = msg.GetEphemeralMessage().GetMessage()
+	}
+	if msg.GetDeviceSentMessage() != nil && msg.GetDeviceSentMessage().GetMessage() != nil {
+		msg = msg.GetDeviceSentMessage().GetMessage()
+	}
+	if msg.GetViewOnceMessage() != nil && msg.GetViewOnceMessage().GetMessage() != nil {
+		msg = msg.GetViewOnceMessage().GetMessage()
+	}
+	if msg.GetViewOnceMessageV2() != nil && msg.GetViewOnceMessageV2().GetMessage() != nil {
+		msg = msg.GetViewOnceMessageV2().GetMessage()
+	}
+
+	// Extract text from known message types
+	if t := msg.GetConversation(); t != "" {
+		return t
+	}
+	if t := msg.GetExtendedTextMessage(); t != nil && t.GetText() != "" {
+		return t.GetText()
+	}
+	if t := msg.GetImageMessage(); t != nil {
+		if cap := t.GetCaption(); cap != "" {
+			return "[Image] " + cap
+		}
+		return "[Image]"
+	}
+	if t := msg.GetVideoMessage(); t != nil {
+		if cap := t.GetCaption(); cap != "" {
+			return "[Video] " + cap
+		}
+		return "[Video]"
+	}
+	if msg.GetDocumentMessage() != nil {
+		name := msg.GetDocumentMessage().GetFileName()
+		if name != "" {
+			return "[Document] " + name
+		}
+		return "[Document]"
+	}
+	if msg.GetAudioMessage() != nil {
+		if msg.GetAudioMessage().GetPTT() {
+			return "[Voice note]"
+		}
+		return "[Audio]"
+	}
+	if msg.GetStickerMessage() != nil {
+		return "[Sticker]"
+	}
+	if msg.GetContactMessage() != nil {
+		return "[Contact] " + msg.GetContactMessage().GetDisplayName()
+	}
+	if msg.GetLocationMessage() != nil {
+		return "[Location]"
+	}
+	if msg.GetLiveLocationMessage() != nil {
+		return "[Live location]"
+	}
+	if msg.GetReactionMessage() != nil {
+		return msg.GetReactionMessage().GetText()
+	}
+	if msg.GetPollCreationMessage() != nil {
+		return "[Poll] " + msg.GetPollCreationMessage().GetName()
+	}
+
+	// Skip protocol/system messages (no user content)
+	if msg.GetProtocolMessage() != nil ||
+		msg.GetSenderKeyDistributionMessage() != nil ||
+		msg.GetPollUpdateMessage() != nil {
+		return ""
+	}
+
+	// Unknown message type — skip rather than show "[Message]"
+	return ""
 }
 
 func truncateMsg(s string, maxLen int) string {
