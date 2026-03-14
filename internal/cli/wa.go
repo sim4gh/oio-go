@@ -15,8 +15,7 @@ import (
 	"github.com/sim4gh/oio-go/internal/whatsapp"
 	"github.com/spf13/cobra"
 	"go.mau.fi/whatsmeow/proto/waE2E"
-	"go.mau.fi/whatsmeow/proto/waHistorySync"
-	"go.mau.fi/whatsmeow/proto/waWeb"
+	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 )
@@ -236,13 +235,23 @@ func runWaSend(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// unreadConversation holds a conversation with unread messages from history sync.
-type unreadConversation struct {
-	Name        string
-	JID         string
-	UnreadCount uint32
-	Messages    []*waWeb.WebMessageInfo
-	LastMsgTime uint64
+// chatMessages holds messages collected for a single chat.
+type chatMessages struct {
+	Name     string
+	JID      string
+	IsGroup  bool
+	Messages []chatMsg
+	// HistorySync metadata (supplementary)
+	HistoryUnreadCount uint32
+	HistoryName        string
+}
+
+// chatMsg holds a single message from events.Message.
+type chatMsg struct {
+	Time   time.Time
+	Sender string
+	Text   string
+	FromMe bool
 }
 
 func runWaLs(cmd *cobra.Command, args []string) error {
@@ -260,10 +269,49 @@ func runWaLs(cmd *cobra.Command, args []string) error {
 	s.Start()
 
 	var mu sync.Mutex
-	var conversations []*unreadConversation
+	chats := make(map[types.JID]*chatMessages)        // offline messages by chat
+	historyMeta := make(map[string]*histSyncConvMeta)  // history sync metadata by JID string
+	done := make(chan struct{}, 1)
 
 	client.AddEventHandler(func(evt interface{}) {
 		switch v := evt.(type) {
+		case *events.OfflineSyncPreview:
+			// Informational — server will send v.Messages offline messages
+		case *events.Message:
+			text := extractMessageText(v.Message)
+			if text == "" {
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			chat, ok := chats[v.Info.Chat]
+			if !ok {
+				name := v.Info.PushName
+				if v.Info.IsGroup {
+					name = v.Info.Chat.String() // placeholder, may be enriched by history sync
+				}
+				chat = &chatMessages{
+					Name:    name,
+					JID:     v.Info.Chat.String(),
+					IsGroup: v.Info.IsGroup,
+				}
+				chats[v.Info.Chat] = chat
+			}
+			// For 1:1 chats, use PushName as chat name if we don't have one yet
+			if !v.Info.IsGroup && chat.Name == "" && v.Info.PushName != "" {
+				chat.Name = v.Info.PushName
+			}
+			chat.Messages = append(chat.Messages, chatMsg{
+				Time:   v.Info.Timestamp,
+				Sender: v.Info.PushName,
+				Text:   text,
+				FromMe: v.Info.IsFromMe,
+			})
+		case *events.OfflineSyncCompleted:
+			select {
+			case done <- struct{}{}:
+			default:
+			}
 		case *events.HistorySync:
 			if v.Data == nil {
 				return
@@ -271,16 +319,15 @@ func runWaLs(cmd *cobra.Command, args []string) error {
 			mu.Lock()
 			defer mu.Unlock()
 			for _, conv := range v.Data.GetConversations() {
-				if !waLsAll && conv.GetUnreadCount() == 0 {
-					continue
+				jid := conv.GetID()
+				name := conv.GetDisplayName()
+				if name == "" {
+					name = conv.GetName()
 				}
-				conversations = append(conversations, &unreadConversation{
-					Name:        conversationName(conv),
-					JID:         conv.GetID(),
+				historyMeta[jid] = &histSyncConvMeta{
+					Name:        name,
 					UnreadCount: conv.GetUnreadCount(),
-					Messages:    extractWebMessages(conv.GetMessages()),
-					LastMsgTime: conv.GetLastMsgTimestamp(),
-				})
+				}
 			}
 		}
 	})
@@ -292,14 +339,51 @@ func runWaLs(cmd *cobra.Command, args []string) error {
 	}
 	defer client.Disconnect()
 
-	// Wait for history sync events (they arrive in chunks over several seconds)
-	time.Sleep(10 * time.Second)
+	// Wait for OfflineSyncCompleted or timeout
+	select {
+	case <-done:
+		// Give a brief extra window for any trailing history sync
+		time.Sleep(2 * time.Second)
+	case <-time.After(15 * time.Second):
+	}
 	s.Stop()
 
 	mu.Lock()
 	defer mu.Unlock()
 
-	if len(conversations) == 0 {
+	// Merge history sync metadata into chats
+	for jid, chat := range chats {
+		if meta, ok := historyMeta[jid.String()]; ok {
+			if meta.Name != "" && (chat.IsGroup || chat.Name == "" || chat.Name == jid.String()) {
+				chat.Name = meta.Name
+			}
+			chat.HistoryUnreadCount = meta.UnreadCount
+			chat.HistoryName = meta.Name
+		}
+		// Fallback: if still no name, use JID
+		if chat.Name == "" {
+			chat.Name = jid.String()
+		}
+	}
+
+	// Build sorted list of chats to display
+	var display []*chatMessages
+	for _, chat := range chats {
+		// Filter out chats with only FromMe messages (unless --all)
+		hasIncoming := false
+		for _, msg := range chat.Messages {
+			if !msg.FromMe {
+				hasIncoming = true
+				break
+			}
+		}
+		if !waLsAll && !hasIncoming {
+			continue
+		}
+		display = append(display, chat)
+	}
+
+	if len(display) == 0 {
 		if waLsAll {
 			fmt.Println("No conversations found.")
 		} else {
@@ -308,86 +392,63 @@ func runWaLs(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Sort by last message timestamp (most recent first)
-	sort.Slice(conversations, func(i, j int) bool {
-		return conversations[i].LastMsgTime > conversations[j].LastMsgTime
+	// Sort by most recent message (newest chat first)
+	sort.Slice(display, func(i, j int) bool {
+		ti := display[i].Messages[len(display[i].Messages)-1].Time
+		tj := display[j].Messages[len(display[j].Messages)-1].Time
+		return ti.After(tj)
 	})
 
-	for _, conv := range conversations {
-		printConversation(conv)
+	for _, chat := range display {
+		printChat(chat)
 	}
 
 	return nil
 }
 
-// conversationName returns the best display name for a conversation.
-func conversationName(conv *waHistorySync.Conversation) string {
-	if n := conv.GetDisplayName(); n != "" {
-		return n
-	}
-	if n := conv.GetName(); n != "" {
-		return n
-	}
-	return conv.GetID()
+// histSyncConvMeta holds supplementary metadata from history sync.
+type histSyncConvMeta struct {
+	Name        string
+	UnreadCount uint32
 }
 
-// extractWebMessages extracts WebMessageInfo from history sync messages.
-func extractWebMessages(msgs []*waHistorySync.HistorySyncMsg) []*waWeb.WebMessageInfo {
-	out := make([]*waWeb.WebMessageInfo, 0, len(msgs))
-	for _, m := range msgs {
-		if wmi := m.GetMessage(); wmi != nil {
-			out = append(out, wmi)
-		}
-	}
-	return out
-}
-
-// printConversation renders a single conversation's unread messages.
-func printConversation(conv *unreadConversation) {
-	isGroup := strings.Contains(conv.JID, "@g.us")
-
-	// Header line
-	if conv.UnreadCount > 0 {
-		fmt.Printf("\n%s — %d unread\n", conv.Name, conv.UnreadCount)
-	} else {
-		fmt.Printf("\n%s\n", conv.Name)
-	}
-
+// printChat renders a single chat's messages.
+func printChat(chat *chatMessages) {
 	// Sort messages by timestamp (oldest first)
-	msgs := conv.Messages
-	sort.Slice(msgs, func(i, j int) bool {
-		return msgs[i].GetMessageTimestamp() < msgs[j].GetMessageTimestamp()
+	sort.Slice(chat.Messages, func(i, j int) bool {
+		return chat.Messages[i].Time.Before(chat.Messages[j].Time)
 	})
 
-	// Show up to unreadCount messages from the end, or all if --all
-	showMsgs := msgs
-	if !waLsAll && conv.UnreadCount > 0 && int(conv.UnreadCount) < len(msgs) {
-		showMsgs = msgs[len(msgs)-int(conv.UnreadCount):]
+	// Count incoming messages
+	incomingCount := 0
+	for _, msg := range chat.Messages {
+		if !msg.FromMe {
+			incomingCount++
+		}
 	}
 
-	for _, wmi := range showMsgs {
-		if wmi.GetKey().GetFromMe() {
-			continue // Skip our own sent messages
-		}
-		text := extractMessageText(wmi.GetMessage())
-		if text == "" {
+	// Use history sync unread count if available, otherwise count of incoming messages
+	unreadCount := incomingCount
+	if chat.HistoryUnreadCount > 0 {
+		unreadCount = int(chat.HistoryUnreadCount)
+	}
+
+	// Header line
+	if unreadCount > 0 {
+		fmt.Printf("\n%s — %d unread\n", chat.Name, unreadCount)
+	} else {
+		fmt.Printf("\n%s\n", chat.Name)
+	}
+
+	for _, msg := range chat.Messages {
+		if msg.FromMe {
 			continue
 		}
-
-		ts := time.Unix(int64(wmi.GetMessageTimestamp()), 0).Local().Format("15:04")
-
-		if isGroup {
-			sender := wmi.GetPushName()
-			if sender == "" {
-				sender = wmi.GetParticipant()
-			}
-			if sender != "" {
-				fmt.Printf("  [%s] %s: %s\n", ts, sender, truncateMsg(text, 70))
-			} else {
-				fmt.Printf("  [%s] %s\n", ts, truncateMsg(text, 70))
-			}
+		ts := msg.Time.Local().Format("15:04")
+		if chat.IsGroup && msg.Sender != "" {
+			fmt.Printf("  [%s] %s: %s\n", ts, msg.Sender, truncateMsg(msg.Text, 70))
 		} else {
-			fmt.Printf("  [%s] %s\n", ts, truncateMsg(text, 70))
+			fmt.Printf("  [%s] %s\n", ts, truncateMsg(msg.Text, 70))
 		}
 	}
 }
