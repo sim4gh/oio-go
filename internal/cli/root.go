@@ -8,7 +8,7 @@ import (
 )
 
 // Version is set at build time
-var Version = "2.5.1"
+var Version = "2.6.0"
 
 // rootCmd represents the base command
 var rootCmd = &cobra.Command{
@@ -72,7 +72,23 @@ Usage:
 Commands:
   a, add [input]              Add from clipboard, screenshot, file, or text
     ├ c                       Quick clipboard shortcut
-    └ sc                      Quick screenshot shortcut
+    ├ sc                      Quick screenshot shortcut
+    │
+    │ Flags:
+    │   --permanent           Keep forever (no expiration)
+    │   --ttl <duration>      Custom TTL (e.g., 1h, 7d, 30d)
+    │   --public, -p          Create public share link on add
+    │   --password <pass>     Password-protected share on add
+    │   --title <text>        Social preview title (with --public)
+    │   --desc <text>         Social preview description
+    │
+    │ Examples:
+    │   oio a                 Add from clipboard
+    │   oio a doc.pdf         Upload file (default: 24h TTL)
+    │   oio a doc.pdf --permanent --public
+    │                         Upload permanently + get share URL
+    └   oio a "hello" -p     Add text + share publicly
+
   auth                        Authentication commands
   config [subcommand]         Manage configuration
   d, delete <id>              Delete item by ID

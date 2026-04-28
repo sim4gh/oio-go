@@ -29,9 +29,8 @@ var (
 )
 
 const (
-	maxTextSizeBytes = 360 * 1024       // 360KB for text
-	maxFileSizeBytes = 150 * 1024 * 1024 // 150MB for files
-	maxFileTTLSeconds = 7 * 24 * 3600   // 7 days max for file TTL
+	maxTextSizeBytes = 360 * 1024              // 360KB for text
+	maxFileSizeBytes = 10 * 1024 * 1024 * 1024 // 10GB for files
 	defaultTTL       = "24h"
 )
 
@@ -138,7 +137,7 @@ func handleFileUpload(filePath string, s *spinner.Spinner) error {
 	}
 
 	if fileInfo.Size() > maxFileSizeBytes {
-		return fmt.Errorf("file too large. Maximum size is 150MB, file is %s", util.FormatBytes(fileInfo.Size()))
+		return fmt.Errorf("file too large. Maximum size is 10GB, file is %s", util.FormatBytes(fileInfo.Size()))
 	}
 
 	filename := filepath.Base(filePath)
@@ -170,7 +169,9 @@ func handleFileUpload(filePath string, s *spinner.Spinner) error {
 		"contentType": contentType,
 		"fileSize":    fileInfo.Size(),
 	}
-	if ttlSeconds > 0 {
+	if addPermanent {
+		initBody["ttl"] = "permanent"
+	} else if ttlSeconds > 0 {
 		initBody["ttl"] = fmt.Sprintf("%ds", ttlSeconds)
 	}
 
@@ -327,7 +328,9 @@ func uploadTextContent(content string, s *spinner.Spinner) error {
 	body := map[string]interface{}{
 		"content": content,
 	}
-	if ttlSeconds > 0 {
+	if addPermanent {
+		body["ttl"] = 0
+	} else if ttlSeconds > 0 {
 		body["ttl"] = ttlSeconds
 	}
 
@@ -382,7 +385,9 @@ func uploadImage(imageData []byte, s *spinner.Spinner, source string) error {
 		"contentType": "image/png",
 		"data":        base64Data,
 	}
-	if ttlSeconds > 0 {
+	if addPermanent {
+		body["ttl"] = "permanent"
+	} else if ttlSeconds > 0 {
 		body["ttl"] = fmt.Sprintf("%ds", ttlSeconds)
 	} else {
 		body["ttl"] = "24h"
@@ -452,12 +457,6 @@ func calculateTTL(isFile bool) int {
 	ttlSeconds, err := util.ParseTTL(ttlString)
 	if err != nil {
 		ttlSeconds = 24 * 3600 // Default to 24h
-	}
-
-	// Cap file TTL at 7 days
-	if isFile && ttlSeconds > maxFileTTLSeconds {
-		fmt.Println("Note: TTL capped at 7 days (168h) for file items")
-		ttlSeconds = maxFileTTLSeconds
 	}
 
 	return ttlSeconds
