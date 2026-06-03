@@ -97,7 +97,13 @@ func NewClient(verbose bool) (*whatsmeow.Client, error) {
 		log = noopLogger{}
 	}
 
-	container, err := sqlstore.New(context.Background(), "sqlite", "file:"+dbPath+"?_pragma=foreign_keys(1)", log)
+	// WAL mode + a busy_timeout are required: whatsmeow opens a multi-connection
+	// pool and writes from background goroutines right after Connect(), while
+	// foreground calls like SendMessage read concurrently (e.g. "fetch LID
+	// mappings"). Without busy_timeout, SQLite returns SQLITE_BUSY immediately
+	// instead of waiting for the lock; WAL lets readers and writers coexist.
+	dsn := "file:" + dbPath + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)"
+	container, err := sqlstore.New(context.Background(), "sqlite", dsn, log)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session store: %w", err)
 	}

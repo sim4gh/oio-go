@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -12,15 +13,22 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/briandowns/spinner"
 	"github.com/mdp/qrterminal/v3"
+	"github.com/sim4gh/oio-go/internal/platform"
+	"github.com/sim4gh/oio-go/internal/upload"
+	"github.com/sim4gh/oio-go/internal/util"
 	"github.com/sim4gh/oio-go/internal/whatsapp"
 	"github.com/spf13/cobra"
+	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 )
 
-var waLsAll bool
+var (
+	waLsAll          bool
+	waSendFullscreen bool
+)
 
 func addWaCommands() {
 	waCmd := &cobra.Command{
@@ -45,20 +53,31 @@ Examples:
 	}
 
 	sendCmd := &cobra.Command{
-		Use:   "send <number> [message]",
-		Short: "Send a WhatsApp message",
-		Long: `Send a WhatsApp message to a phone number.
+		Use:   "send <number> [message|file|sc] [caption]",
+		Short: "Send a WhatsApp message or image",
+		Long: `Send a WhatsApp message, image, video or document to a phone number.
 
-If no message is provided, sends clipboard content.
+The second argument is auto-detected:
+  - "sc"                      capture a screenshot and send it (macOS)
+  - an existing file path     send that file (image/video/audio/document)
+  - anything else             send it as a text message
+  - omitted                   send clipboard content (image if present, else text)
+
+When sending a file or screenshot, any extra words become the caption.
 Phone number should include country code (e.g., 14255687870 for US).
 
 Examples:
-  oio wa send 14255687870 "Hello!"
-  oio wa send 14255687870              # sends clipboard
-  oio wa send +1-425-568-7870 "Hi"     # non-digits are stripped`,
+  oio wa send 14255687870 "Hello!"               # text message
+  oio wa send 14255687870                         # clipboard (image or text)
+  oio wa send 14255687870 photo.png "nice!"       # image with caption
+  oio wa send 14255687870 clip.mp4                # video
+  oio wa send 14255687870 report.pdf              # document
+  oio wa send 14255687870 sc "look at this"       # screenshot with caption
+  oio wa send +1-425-568-7870 "Hi"                # non-digits are stripped`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: runWaSend,
 	}
+	sendCmd.Flags().BoolVarP(&waSendFullscreen, "fullscreen", "f", false, "Capture full screen instead of region select (for sc)")
 
 	lsCmd := &cobra.Command{
 		Use:     "ls",
@@ -204,35 +223,176 @@ func runWaSend(cmd *cobra.Command, args []string) error {
 	s.Stop()
 
 	number := args[0]
-	var message string
-	if len(args) > 1 {
-		message = strings.Join(args[1:], " ")
-	} else {
-		text, clipErr := clipboard.ReadAll()
-		if clipErr != nil || strings.TrimSpace(text) == "" {
-			return fmt.Errorf("no message provided and clipboard is empty")
-		}
-		message = text
-		fmt.Printf("Sending clipboard content (%d chars)\n", len(message))
+
+	// Auto-detect what to send from the remaining arguments.
+	msg, desc, err := buildWaSendMessage(client, args[1:])
+	if err != nil {
+		return err
 	}
 
 	jid := whatsapp.FormatNumber(number)
 
 	s = spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	s.Suffix = " Sending message..."
+	s.Suffix = " Sending " + desc + "..."
 	s.Start()
 
-	_, err = client.SendMessage(context.Background(), jid, &waE2E.Message{
-		Conversation: proto.String(message),
-	})
+	_, err = client.SendMessage(context.Background(), jid, msg)
 	s.Stop()
 
 	if err != nil {
 		return fmt.Errorf("failed to send: %w", err)
 	}
 
-	fmt.Printf("Message sent to %s\n", number)
+	fmt.Printf("%s sent to %s\n", capitalize(desc), number)
 	return nil
+}
+
+// buildWaSendMessage resolves the WhatsApp message to send from the arguments
+// after the phone number, auto-detecting screenshots, files, and text.
+// It returns the message, a short human-readable description, and any error.
+func buildWaSendMessage(client *whatsmeow.Client, rest []string) (*waE2E.Message, string, error) {
+	// No argument: send clipboard content (image if present, otherwise text).
+	if len(rest) == 0 {
+		if platform.ClipboardHasImage() {
+			data, err := platform.GetClipboardImage()
+			if err == nil && len(data) > 0 {
+				fmt.Println("Sending clipboard image")
+				return buildWaMedia(client, data, "image/png", "", "clipboard.png")
+			}
+		}
+		text, clipErr := clipboard.ReadAll()
+		if clipErr != nil || strings.TrimSpace(text) == "" {
+			return nil, "", fmt.Errorf("no message provided and clipboard is empty")
+		}
+		fmt.Printf("Sending clipboard content (%d chars)\n", len(text))
+		return &waE2E.Message{Conversation: proto.String(text)}, "message", nil
+	}
+
+	first := rest[0]
+	caption := strings.Join(rest[1:], " ")
+
+	// "sc": capture a screenshot and send it.
+	if first == "sc" {
+		if !platform.IsScreenshotSupported() {
+			return nil, "", fmt.Errorf("screenshot capture is only supported on macOS")
+		}
+		if !waSendFullscreen {
+			fmt.Println("Select area for screenshot...")
+		}
+		data, err := platform.CaptureScreenshot(false, waSendFullscreen)
+		if err != nil {
+			return nil, "", err
+		}
+		if data == nil {
+			return nil, "", fmt.Errorf("screenshot cancelled")
+		}
+		return buildWaMedia(client, data, "image/png", caption, "screenshot.png")
+	}
+
+	// Existing file: send as media (image/video/audio/document).
+	// Expand a leading "~" so quoted paths like "~/Downloads/x.png" also work
+	// (unquoted ones are already expanded by the shell).
+	path := expandTilde(first)
+	if info, err := os.Stat(path); err == nil && !info.IsDir() {
+		if info.Size() == 0 {
+			return nil, "", fmt.Errorf("cannot send empty file")
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, "", err
+		}
+		return buildWaMedia(client, data, upload.GetMimeType(path), caption, filepath.Base(path))
+	}
+
+	// Otherwise: plain text message (join all remaining args).
+	return &waE2E.Message{Conversation: proto.String(strings.Join(rest, " "))}, "message", nil
+}
+
+// buildWaMedia uploads media bytes to WhatsApp and builds the matching message
+// type based on the MIME type (image, video, audio, or document fallback).
+func buildWaMedia(client *whatsmeow.Client, data []byte, mimeType, caption, filename string) (*waE2E.Message, string, error) {
+	kind := mimeType
+	if i := strings.Index(kind, "/"); i != -1 {
+		kind = kind[:i]
+	}
+
+	var mediaType whatsmeow.MediaType
+	switch kind {
+	case "image":
+		mediaType = whatsmeow.MediaImage
+	case "video":
+		mediaType = whatsmeow.MediaVideo
+	case "audio":
+		mediaType = whatsmeow.MediaAudio
+	default:
+		mediaType = whatsmeow.MediaDocument
+	}
+
+	fmt.Printf("Uploading %s (%s)\n", filename, util.FormatBytes(int64(len(data))))
+	resp, err := client.Upload(context.Background(), data, mediaType)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to upload media: %w", err)
+	}
+
+	switch mediaType {
+	case whatsmeow.MediaImage:
+		m := &waE2E.ImageMessage{
+			Mimetype:      proto.String(mimeType),
+			URL:           &resp.URL,
+			DirectPath:    &resp.DirectPath,
+			MediaKey:      resp.MediaKey,
+			FileEncSHA256: resp.FileEncSHA256,
+			FileSHA256:    resp.FileSHA256,
+			FileLength:    &resp.FileLength,
+		}
+		if caption != "" {
+			m.Caption = proto.String(caption)
+		}
+		return &waE2E.Message{ImageMessage: m}, "image", nil
+
+	case whatsmeow.MediaVideo:
+		m := &waE2E.VideoMessage{
+			Mimetype:      proto.String(mimeType),
+			URL:           &resp.URL,
+			DirectPath:    &resp.DirectPath,
+			MediaKey:      resp.MediaKey,
+			FileEncSHA256: resp.FileEncSHA256,
+			FileSHA256:    resp.FileSHA256,
+			FileLength:    &resp.FileLength,
+		}
+		if caption != "" {
+			m.Caption = proto.String(caption)
+		}
+		return &waE2E.Message{VideoMessage: m}, "video", nil
+
+	case whatsmeow.MediaAudio:
+		m := &waE2E.AudioMessage{
+			Mimetype:      proto.String(mimeType),
+			URL:           &resp.URL,
+			DirectPath:    &resp.DirectPath,
+			MediaKey:      resp.MediaKey,
+			FileEncSHA256: resp.FileEncSHA256,
+			FileSHA256:    resp.FileSHA256,
+			FileLength:    &resp.FileLength,
+		}
+		return &waE2E.Message{AudioMessage: m}, "audio", nil
+
+	default:
+		m := &waE2E.DocumentMessage{
+			Mimetype:      proto.String(mimeType),
+			FileName:      proto.String(filename),
+			URL:           &resp.URL,
+			DirectPath:    &resp.DirectPath,
+			MediaKey:      resp.MediaKey,
+			FileEncSHA256: resp.FileEncSHA256,
+			FileSHA256:    resp.FileSHA256,
+			FileLength:    &resp.FileLength,
+		}
+		if caption != "" {
+			m.Caption = proto.String(caption)
+		}
+		return &waE2E.Message{DocumentMessage: m}, "document", nil
+	}
 }
 
 // chatMessages holds messages collected for a single chat.
@@ -605,6 +765,18 @@ func extractMessageText(msg *waE2E.Message) string {
 
 	// Unknown message type — skip rather than show "[Message]"
 	return ""
+}
+
+// expandTilde replaces a leading "~" or "~/" with the user's home directory.
+// Other paths are returned unchanged. This makes quoted paths behave like the
+// shell's own tilde expansion for unquoted arguments.
+func expandTilde(path string) string {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(path[1:], "/"))
+		}
+	}
+	return path
 }
 
 func truncateMsg(s string, maxLen int) string {

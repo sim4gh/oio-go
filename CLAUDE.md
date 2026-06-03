@@ -147,12 +147,41 @@ oio
 │   ├── oio rec -d 30      # 30 seconds
 │   ├── oio rec --format mp4  # MP4 output
 │   └── oio rec --format mov  # MOV (no ffmpeg)
+├── wa                     # WhatsApp messaging (whatsmeow, local SQLite session)
+│   ├── oio wa link        # Link account (scan QR)
+│   ├── oio wa send <num> [message|file|sc] [caption]  # See below
+│   ├── oio wa ls [--all]  # Unread (or all) conversations
+│   ├── oio wa status      # Link status
+│   └── oio wa unlink      # Clear session
 ├── config                 # Configuration management
 ├── health                 # Health check
 ├── c                      # Quick clipboard (alias for "oio a")
 ├── sc                     # Quick screenshot (alias for "oio a sc")
 └── p <id>                 # Quick public share
 ```
+
+### WhatsApp (`wa`)
+
+WhatsApp is handled locally via [whatsmeow](https://github.com/tulir/whatsmeow),
+not the OIO backend. The session lives in a SQLite DB next to `config.json`
+(`internal/whatsapp/client.go`, `GetDBPath()`), opened in **WAL mode with a
+`busy_timeout`** — required because whatsmeow writes from background goroutines
+while foreground calls (e.g. `SendMessage` → "fetch LID mappings") read
+concurrently; without it SQLite returns `SQLITE_BUSY` immediately.
+
+`oio wa send <number> [arg] [caption...]` auto-detects the second argument
+(`runWaSend` / `buildWaSendMessage` in `internal/cli/wa.go`):
+
+| Second arg | Behavior |
+|------------|----------|
+| omitted | Send clipboard content — image if the clipboard holds one, else text |
+| `sc` | Capture a screenshot (region select, or full screen with `-f`) and send it |
+| existing file path | Send the file; MIME type picks `ImageMessage`/`VideoMessage`/`AudioMessage`/`DocumentMessage` |
+| anything else | Send as a plain text message |
+
+Paths may be absolute, relative (`./x.png`, `../x.png`), or use `~` even when
+quoted (`expandTilde` handles the quoted case; the shell handles unquoted).
+Extra words after a file/`sc` become the caption.
 
 ## Adding New Commands
 
