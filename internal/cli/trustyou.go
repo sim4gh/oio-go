@@ -17,6 +17,7 @@ var (
 	trustMax      int
 	trustMaxSize  string
 	trustPassword string
+	trustTitle    string
 )
 
 func addTrustYouCommand() {
@@ -40,6 +41,7 @@ Examples:
 	trustYouCmd.Flags().IntVar(&trustMax, "max", 1, "Maximum number of uploads allowed")
 	trustYouCmd.Flags().StringVar(&trustMaxSize, "max-size", "5GB", "Maximum file size per upload (e.g., 10MB, 1GB, 5GB)")
 	trustYouCmd.Flags().StringVar(&trustPassword, "password", "", "Optional password required to upload")
+	trustYouCmd.Flags().StringVar(&trustTitle, "title", "File upload", "Title shown on the upload page")
 
 	rootCmd.AddCommand(trustYouCmd)
 }
@@ -70,6 +72,7 @@ func runTrustYou(cmd *cobra.Command, args []string) error {
 	s.Start()
 
 	body := map[string]interface{}{
+		"title":          trustTitle,
 		"maxFileSize":    maxFileSize,
 		"maxSubmissions": trustMax,
 		"expiresInHours": expiresInHours,
