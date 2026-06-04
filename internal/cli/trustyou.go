@@ -18,6 +18,7 @@ var (
 	trustMaxSize  string
 	trustPassword string
 	trustTitle    string
+	trustFrom     string
 )
 
 func addTrustYouCommand() {
@@ -42,6 +43,7 @@ Examples:
 	trustYouCmd.Flags().StringVar(&trustMaxSize, "max-size", "5GB", "Maximum file size per upload (e.g., 10MB, 1GB, 5GB)")
 	trustYouCmd.Flags().StringVar(&trustPassword, "password", "", "Optional password required to upload")
 	trustYouCmd.Flags().StringVar(&trustTitle, "title", "File upload", "Title shown on the upload page")
+	trustYouCmd.Flags().StringVar(&trustFrom, "from", "", "Your name/label shown to the uploader (defaults to your account email)")
 
 	rootCmd.AddCommand(trustYouCmd)
 }
@@ -79,6 +81,9 @@ func runTrustYou(cmd *cobra.Command, args []string) error {
 	}
 	if trustPassword != "" {
 		body["password"] = trustPassword
+	}
+	if trustFrom != "" {
+		body["ownerLabel"] = trustFrom
 	}
 
 	resp, err := api.Post("/request-links", body)
