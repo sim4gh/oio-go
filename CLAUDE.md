@@ -157,12 +157,24 @@ oio
 │   ├── nk link <url>     # Shorten (--ttl 7d, --permanent; copies to clipboard)
 │   ├── nk link ls        # List your short links
 │   └── nk link d <code>  # Delete a short link
+├── trustyou               # Create a web upload link (people send YOU files, no account)
+│                          #   --max-size 200GB --max 10 --ttl 7d --from "Name" --password x
+│                          #   POST /request-links → prints nikte.co/r/<id> (clipboard)
 ├── config                 # Configuration management
 ├── health                 # Health check
 ├── c                      # Quick clipboard (alias for "nk a")
 ├── sc                     # Quick screenshot (alias for "nk a sc")
 └── p <id>                 # Quick public share
 ```
+
+### `trustyou` (web file request)
+
+`nk trustyou` creates a **request-link** the recipient opens in the browser to upload files
+to you (`POST /request-links`; prints + clipboard-copies `https://nikte.co/r/<code>`). Flags:
+`--max-size` (bytes ceiling, owner up to 200 GB), `--max` (uploads), `--ttl` (→ expiresInHours,
+capped 720), `--from` (owner label shown on the page; defaults to your account email),
+`--password`. Recipients upload via the web (multipart for >100 MB) — no CLI needed. The old
+`nk trustme` / trust-token commands were removed.
 
 ### WhatsApp (`wa`)
 
