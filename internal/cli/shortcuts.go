@@ -23,6 +23,7 @@ func addShortcutCommands() {
 	cCmd.Flags().StringVar(&addTTL, "ttl", defaultTTL, "Custom TTL (e.g., 1h, 7d)")
 	cCmd.Flags().BoolVarP(&addPublic, "public", "p", false, "Create public share on add (Pro)")
 	cCmd.Flags().StringVar(&addPassword, "password", "", "Password-protected share (Pro)")
+	cCmd.Flags().BoolVar(&addQR, "qr", false, "Print a scannable QR code of the share URL (with --public/--password)")
 
 	rootCmd.AddCommand(cCmd)
 
@@ -43,6 +44,7 @@ func addShortcutCommands() {
 	scCmd.Flags().BoolVarP(&addWindow, "window", "w", false, "Capture specific window")
 	scCmd.Flags().BoolVarP(&addFullscreen, "fullscreen", "f", false, "Capture full screen")
 	scCmd.Flags().StringVar(&addWatch, "watch", "", "Continuous capture mode (optional: interval in seconds)")
+	scCmd.Flags().BoolVar(&addQR, "qr", false, "Print a scannable QR code of the share URL (with --public/--password)")
 
 	rootCmd.AddCommand(scCmd)
 
@@ -60,6 +62,7 @@ func addShortcutCommands() {
 	pCmd.Flags().StringVar(&shareExpires, "expires", "", "Share expiration (default: 24h, e.g., 7d)")
 	pCmd.Flags().StringVar(&shareTitle, "title", "", "Share title for social previews")
 	pCmd.Flags().StringVar(&shareDesc, "desc", "", "Share description for social previews")
+	pCmd.Flags().BoolVar(&shareQR, "qr", false, "Print a scannable QR code of the share URL")
 
 	rootCmd.AddCommand(pCmd)
 }

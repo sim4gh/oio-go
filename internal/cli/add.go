@@ -17,15 +17,16 @@ import (
 )
 
 var (
-	addPermanent   bool
-	addTTL         string
-	addPublic      bool
-	addPassword    string
-	addTitle       string
-	addDesc        string
-	addWindow      bool
-	addFullscreen  bool
-	addWatch       string
+	addPermanent  bool
+	addTTL        string
+	addPublic     bool
+	addPassword   string
+	addTitle      string
+	addDesc       string
+	addWindow     bool
+	addFullscreen bool
+	addWatch      string
+	addQR         bool
 )
 
 const (
@@ -62,6 +63,7 @@ Examples:
 	addCmd.Flags().BoolVarP(&addWindow, "window", "w", false, "Capture specific window (for screenshot)")
 	addCmd.Flags().BoolVarP(&addFullscreen, "fullscreen", "f", false, "Capture full screen (for screenshot)")
 	addCmd.Flags().StringVar(&addWatch, "watch", "", "Continuous screenshot mode (optional: interval in seconds)")
+	addCmd.Flags().BoolVar(&addQR, "qr", false, "Print a scannable QR code of the share URL (with --public/--password)")
 
 	rootCmd.AddCommand(addCmd)
 }
@@ -509,6 +511,9 @@ func createShare(itemID, itemType string) error {
 			if shareURL != "" {
 				fmt.Printf("\nShare URL: %s\n", shareURL)
 				copyToClipboard(shareURL, "Share URL")
+				if addQR {
+					printQR(shareURL)
+				}
 			}
 		}
 		return nil

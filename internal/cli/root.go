@@ -96,13 +96,16 @@ Commands:
   g, get <id>                 Get/download item by ID
   health                      Check system health status
   ls, list                    List all items
+    └ -i, --interactive       Navigable list (arrows, copy, delete)
   rec                         Record screen to GIF, MP4, or MOV
   sh, share <id>              Share item (Pro only)
+    ├ --qr                    Print a scannable QR of the share URL
     └ p <id>                  Quick public share shortcut
   trustyou                    Create a link for browser file uploads
   wa                          WhatsApp messaging commands
     ├ link                    Link WhatsApp (scan QR code)
     ├ send <number> [msg]     Send a WhatsApp message
+    │   └ --item <id>         Forward a nikte item by ID
     ├ ls                      Show incoming messages (live)
     ├ status                  Check link status
     └ unlink                  Unlink WhatsApp

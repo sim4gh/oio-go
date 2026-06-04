@@ -19,6 +19,7 @@ var (
 	shareExpires  string
 	shareTitle    string
 	shareDesc     string
+	shareQR       bool
 )
 
 const defaultShareExpiryDays = 1
@@ -46,6 +47,7 @@ All shares use share.nikte.co/{id}`,
 	shareCmd.Flags().StringVar(&shareExpires, "expires", "", "Share expiration (default: 24h, e.g., 7d)")
 	shareCmd.Flags().StringVar(&shareTitle, "title", "", "Share title for social previews")
 	shareCmd.Flags().StringVar(&shareDesc, "desc", "", "Share description for social previews")
+	shareCmd.Flags().BoolVar(&shareQR, "qr", false, "Print a scannable QR code of the share URL")
 
 	rootCmd.AddCommand(shareCmd)
 }
@@ -75,6 +77,9 @@ func runShare(cmd *cobra.Command, args []string) error {
 			if err := clipboard.WriteAll(result.data.ShareURL); err == nil {
 				fmt.Println("\n(Share URL copied to clipboard)")
 			}
+		}
+		if shareQR {
+			printQR(result.data.ShareURL)
 		}
 		return nil
 	}

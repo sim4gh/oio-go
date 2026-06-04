@@ -277,6 +277,22 @@ func handleFileDownload(downloadURL, filename string) error {
 	return nil
 }
 
+// downloadBytes fetches a URL into memory. Used when bytes are needed in-process
+// (e.g. forwarding a nikte item over WhatsApp) rather than written to disk.
+func downloadBytes(url string) ([]byte, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("download failed with status %d", resp.StatusCode)
+	}
+
+	return io.ReadAll(resp.Body)
+}
+
 func downloadFile(url, outputPath string) error {
 	resp, err := http.Get(url)
 	if err != nil {
