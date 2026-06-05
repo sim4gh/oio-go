@@ -1,4 +1,4 @@
-.PHONY: build clean test test-integration test-all install
+.PHONY: build clean test test-integration test-all install smoke
 
 # Local dev/test binary is `nk-cli` so it never shadows the production `nk`
 # installed from Homebrew. The release binary (named `nk`) is built by GoReleaser
@@ -50,6 +50,11 @@ test-integration:
 
 # Run all tests
 test-all: test test-integration
+
+# End-to-end smoke test through the real binary against the live backend.
+# RUN THIS BEFORE CUTTING A HOMEBREW RELEASE. Requires `nk auth login`.
+smoke: build
+	@./scripts/smoke.sh ./$(BINARY_NAME)
 
 # Format code
 fmt:

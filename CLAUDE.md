@@ -16,35 +16,51 @@ Features:
 
 ## Development Commands
 
+### Binary convention
+- **`nk`** = production, installed from Homebrew (`brew install sim4gh/nikte/nikte`).
+- **`nk-cli`** = local dev/test build. `make build` produces `./nk-cli` so it never
+  shadows the Homebrew `nk`. (The released binary is named `nk`, built by GoReleaser.)
+
 ### Build
 ```bash
-make build          # Build for current platform
+make build          # Build ./nk-cli for the current platform
 make build-all      # Build for all platforms (macOS, Linux, Windows)
-go build -o nk ./cmd/nk  # Direct Go build
 ```
 
 ### Test Locally
 ```bash
-# Link for local testing
-ln -sf "$(pwd)/oio" ~/bin/nikte-cli
-
-# Test commands
-./nk --version
-./nk health
-./nk auth login
-./nk a "Hello"
-./nk ls
+./nk-cli --version
+./nk-cli health
+./nk-cli a "Hello"
+./nk-cli ls
 ```
 
-### Install
+### Test suites
 ```bash
-make install        # Install to /usr/local/bin (requires sudo)
+make test              # Unit tests (go test ./... — e.g. internal/crypto)
+make test-integration  # Integration tests vs the live backend (needs `nk auth login`)
+make test-all          # Both
+make smoke             # End-to-end smoke test through ./nk-cli (see Releasing)
 ```
 
-### Clean
+### Install / Clean
 ```bash
+make install        # Install ./nk-cli to /usr/local/bin (requires sudo)
 make clean          # Remove build artifacts
 ```
+
+## Releasing to Homebrew
+
+**Always smoke-test before tagging a release.**
+
+1. `make smoke` — builds `nk-cli` and runs `scripts/smoke.sh` end-to-end against the
+   live backend (health, text, client-side encryption round-trip, burn-after-read +
+   cascade, view analytics, URL shortener, trustyou). It cleans up everything it
+   creates and exits non-zero on any failure. **Do not release if smoke fails.**
+2. Bump `var Version` in `internal/cli/root.go`.
+3. Commit, push `main`, then `git tag -a vX.Y.Z -m "Release vX.Y.Z" && git push origin vX.Y.Z`.
+4. GoReleaser builds all platforms and updates the `sim4gh/homebrew-nikte` formula.
+5. `brew upgrade sim4gh/nikte/nikte` to pull it locally.
 
 ## Architecture
 
