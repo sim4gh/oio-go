@@ -106,6 +106,11 @@ nikte-cli/
 | `github.com/olekukonko/tablewriter` | Table rendering |
 | `github.com/atotto/clipboard` | Cross-platform clipboard |
 | `github.com/pkg/browser` | Open URLs in browser |
+| `github.com/mdp/qrterminal/v3` | Terminal QR codes (`--qr`, `wa link`) |
+| `github.com/charmbracelet/bubbletea` + `lipgloss` | Interactive list TUI (`nk ls -i`) |
+| `golang.org/x/crypto/scrypt` + `crypto/aes` (stdlib) | Client-side encryption (`internal/crypto`) |
+| `golang.org/x/term` | Hidden passphrase prompt |
+| `go.mau.fi/whatsmeow` | WhatsApp (`nk wa`, local SQLite session) |
 
 ### Hardcoded Values
 ```go
@@ -135,12 +140,16 @@ oio
 │   ├── nk a              # From clipboard
 │   ├── nk a sc           # Screenshot (macOS)
 │   ├── nk a <path>       # From file
-│   └── nk a "text"       # Text content
-├── g <id>  (alias: get)   # Get/download item
-├── ls  (alias: list)      # List all items
+│   ├── nk a "text"       # Text content
+│   │   #   --encrypt/-e   client-side AES-256-GCM (zero-knowledge)
+│   │   #   --qr           print a QR of the share URL (with --public/--password)
+│   │   #   --max-views N  burn-after-read (with --public/--password)
+├── g <id>  (alias: get)   # Get/download item (auto-decrypts encrypted items)
+├── ls  (alias: list)      # List all items   (-i: interactive navigable TUI)
 ├── d <id>  (alias: delete)# Delete item
 ├── extend <id>            # Extend TTL
-├── sh <id>  (alias: share)# Share item (Pro)
+├── sh <id>  (alias: share)# Share item (Pro); --qr, --max-views N
+│   └── nk sh ls          # List your shares with view counts (analytics)
 ├── rec                    # Screen recording (GIF/MP4/MOV, macOS)
 │   ├── nk rec            # Fullscreen 10s → GIF
 │   ├── nk rec -s         # Select region → GIF
@@ -150,6 +159,7 @@ oio
 ├── wa                     # WhatsApp messaging (whatsmeow, local SQLite session)
 │   ├── nk wa link        # Link account (scan QR)
 │   ├── nk wa send <num> [message|file|sc] [caption]  # See below
+│   │   #   --item <id>    forward an existing nikte item by ID
 │   ├── nk wa ls [--all]  # Unread (or all) conversations
 │   ├── nk wa status      # Link status
 │   └── nk wa unlink      # Clear session
@@ -210,6 +220,53 @@ Extra words after a file/`sc` become the caption.
 
 The public redirect (`share.nikte.co/<code>` → 302) is served by the
 backend's `access-share-handler`, not the CLI.
+
+### Client-side encryption (`--encrypt`/`-e`)
+
+Zero-knowledge encryption lives in `internal/crypto` (no backend involvement —
+the server only ever stores ciphertext). `nk a --encrypt` encrypts text and files
+with **AES-256-GCM** using a key derived from a passphrase via **scrypt**
+(`EncryptText`/`EncryptBytes`). Self-describing formats:
+- Text shorts are stored as `nkenc:v1:<base64(salt|nonce|ciphertext)>`.
+- Files get an `NKENCFL1` magic header and a `.nkenc` filename suffix.
+
+`nk g` auto-detects both (`IsEncryptedText`/`IsEncryptedBytes`) and decrypts
+transparently — text is printed/copied decrypted; files are written with the
+`.nkenc` suffix stripped. Passphrase resolution (`resolvePassphrase` in
+`passphrase.go`): `--enc-pass` flag → `NIKTE_PASSPHRASE` env → hidden TTY prompt
+(`x/term`, with confirm on encrypt). A wrong passphrase fails GCM auth cleanly
+(`ErrWrongPassphrase`). Unit tests in `internal/crypto/crypto_test.go`.
+
+### QR codes (`--qr`)
+
+`printQR` (`internal/cli/qr.go`, `qrterminal.GenerateHalfBlock`) renders a compact
+scannable QR of a URL. Wired into `nk sh`/`nk p` (share URL), `nk link` (short URL),
+and `nk a --public/--password` (share URL). No-op for an empty URL.
+
+### Burn-after-read + view analytics
+
+`--max-views N` on `nk sh`/`nk p`/`nk a --public` sends `maxViews` in the share
+body. The **share** (not the item) carries the counter; the backend
+`access-share-handler` counts each *public* view and burns the share when the
+limit is reached (text shorts are fully destroyed; file links just die — see
+`nikte-be/CLAUDE.md`). Owner `nk g` never counts; link-preview bots are skipped
+(requires `nikte-share` to forward `User-Agent`). `nk sh ls` (`GET /shares`,
+`runShareList`) shows `viewCount`/`maxViews` per share.
+
+### Interactive list (`nk ls -i`)
+
+`internal/cli/tui.go` is a [Bubble Tea](https://github.com/charmbracelet/bubbletea)
+TUI launched by `nk ls -i`. Reuses `fetchAllItems()` and the filtered/sorted set.
+Keys: ↑/↓/j/k navigate, `c` copy ID, `enter` copy ID + quit (prints it), `d` then
+`y` delete (via `tryDelete`), `r` refresh, `q`/esc quit. Actions run off the UI
+thread as `tea.Cmd`s.
+
+### Forward an item over WhatsApp (`nk wa send --item`)
+
+`buildWaItemMessage` (`wa.go`) fetches a nikte item by ID and forwards it: text
+shorts are sent as a message; file shorts, screenshots, and Pro files are
+downloaded (`downloadBytes`) and sent as media via `buildWaMedia`. Extra args
+become the caption (media only).
 
 ## Adding New Commands
 

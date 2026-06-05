@@ -12,7 +12,13 @@ A fast, single-binary CLI tool for ephemeral content management. This is a Go po
 - **Multiple content types**: Text, files, screenshots (macOS)
 - **Screen recording**: Record screen to GIF, MP4, or MOV (macOS, requires ffmpeg for GIF/MP4)
 - **TTL-based expiration**: Automatic content deletion
-- **Pro features**: Sharing capabilities (Pro subscription)
+- **Client-side encryption**: Zero-knowledge AES-256-GCM (`--encrypt`); the server only sees ciphertext
+- **Burn-after-read**: Share links that self-destruct after N views (`--max-views`)
+- **QR codes**: Print a scannable QR of any share/short URL (`--qr`)
+- **Interactive list**: Navigable TUI for browsing items (`nk ls -i`)
+- **WhatsApp**: Send messages/media locally and forward nikte items (`nk wa`)
+- **URL shortener** + **web file requests** (`nk link`, `nk trustyou`)
+- **Pro features**: Sharing capabilities with view-count analytics (`nk sh ls`)
 
 ## Installation
 
@@ -89,15 +95,19 @@ nk a document.pdf         # File upload
 nk a "Hello"              # Text content
 nk a --permanent          # No expiration
 nk a --ttl 7d             # Custom TTL
+nk a "secret" --encrypt   # Client-side encrypt (prompts for passphrase)
+nk a doc.pdf -e           # Encrypt a file before upload
 
 # Get content
-nk g <id>                 # Download/display item
+nk g <id>                 # Download/display item (auto-decrypts if encrypted)
 nk g <id> --url           # Get URL only
 nk g <id> --copy          # Copy URL to clipboard
 nk g <id> -o ~/Downloads  # Save to directory
+nk g <id> --enc-pass X    # Decrypt non-interactively
 
 # List content
 nk ls                     # List all items
+nk ls -i                  # Interactive navigable TUI (copy, delete, refresh)
 nk ls --type text         # Filter by type
 nk ls --search "query"    # Search items
 nk ls --sort size         # Sort by size
@@ -133,7 +143,24 @@ Requires `ffmpeg` for GIF and MP4 formats (`brew install ffmpeg`). MOV format us
 nk sh <id>                # Create public share
 nk sh <id> --password pw  # Password-protected share
 nk sh <id> --expires 7d   # Custom expiration
+nk sh <id> --qr           # Print a scannable QR of the share URL
+nk sh <id> --max-views 1  # Burn-after-read: link dies after 1 view
+nk sh ls                  # List your shares with view counts (analytics)
 nk p <id>                 # Quick public share
+```
+
+Burn-after-read counts only **public** views (your own `nk g` never counts) and
+known link-preview bots are ignored. For a text short the secret is fully
+destroyed on burn; for a file the link dies and the bytes expire on their TTL.
+
+### WhatsApp & web file requests
+
+```bash
+nk wa link                       # Link WhatsApp (scan QR)
+nk wa send <number> "Hi"         # Send a message (also files, sc, clipboard)
+nk wa send <number> --item <id>  # Forward an existing nikte item
+nk link <url>                    # Shorten a URL → share.nikte.co/<code>
+nk trustyou --max 5              # Web link for others to upload files to you
 ```
 
 ### Configuration
