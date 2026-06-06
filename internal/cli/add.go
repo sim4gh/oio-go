@@ -81,6 +81,18 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		input = args[0]
 	}
 
+	// Encryption is for private at-rest storage: a public/password share of an
+	// encrypted item would only expose unusable ciphertext to the recipient (it's
+	// not their account, so they can't `nk g` to decrypt). Refuse the combination.
+	if addEncrypt && (addPublic || addPassword != "") {
+		return fmt.Errorf(`--encrypt cannot be combined with --public/--password
+
+Encrypted items are private (only you can decrypt them with your passphrase).
+To share a secret, use a password-protected or burn-after-read share instead:
+  nk a "secret" --public --max-views 1
+  nk sh <id> --password <pw>`)
+	}
+
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 
 	// Case 1: Screenshot command "nk a sc"

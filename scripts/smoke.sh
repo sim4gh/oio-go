@@ -46,6 +46,9 @@ WRONG=$(NIKTE_PASSPHRASE='nope' $NK g "$EID" 2>&1 | grep -c 'wrong passphrase')
 [ -n "$DEC" ] && [ "$WRONG" = "1" ] && ok "encrypt text round-trip + wrong-pass fails ($EID)" || bad "encrypt text round-trip"
 $NK d "$EID" --force >/dev/null 2>&1
 
+# 2b) guard: --encrypt cannot be combined with --public/--password
+[ "$($NK a "x" --encrypt --public 2>&1 | grep -c 'cannot be combined')" = "1" ] && ok "encrypt+public guard" || bad "encrypt+public guard"
+
 # 3) encryption round-trip (file) — download to a separate dir and compare to original
 echo "encrypted file payload $(date +%s)" > "$TMP/orig.txt"
 mkdir -p "$TMP/dl"
