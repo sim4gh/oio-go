@@ -12,10 +12,10 @@ import (
 	"github.com/sim4gh/nikte-cli/internal/config"
 )
 
-// Cognito configuration - hardcoded values from Node.js CLI
+// Cognito configuration. Values for the CDK-managed user pool (nikte-cdk-dev).
 const (
-	CognitoDomain = "nikte-fcf57b8c.auth.us-west-2.amazoncognito.com"
-	ClientID      = "2385ict6amoluilmqns4jf0n73"
+	CognitoDomain = "niktecdk-dev.auth.us-west-2.amazoncognito.com"
+	ClientID      = "64jbkkmjb9lrnk8pra3ivobfmp"
 	TokenEndpoint = "https://" + CognitoDomain + "/oauth2/token"
 )
 
